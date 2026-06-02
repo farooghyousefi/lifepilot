@@ -12,6 +12,7 @@ Both clients currently use `@lifepilot/api-client` with mock data. The web dashb
 Current web product routes:
 
 - `/dashboard`: overview dashboard
+- `/contracts`: contract overview, summaries, contract cards, and local add-contract form through `ContractService`
 - `/goals`: goals and focus areas
 - `/documents`: document overview and upload preparation UI
 - `/reminders`: reminder agenda

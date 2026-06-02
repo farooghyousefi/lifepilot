@@ -4,6 +4,7 @@ import {
   Bot,
   ChevronDown,
   ChevronRight,
+  CreditCard,
   FileText,
   Home,
   LockKeyhole,
@@ -12,7 +13,6 @@ import {
   ShieldCheck,
   Sparkles,
   Sun,
-  Target,
   type LucideIcon,
 } from "lucide-react";
 
@@ -24,6 +24,7 @@ const sidebarItems: Array<{
   label: string;
 }> = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
+  { href: "/contracts", icon: CreditCard, label: "Contracts" },
   { href: "/goals", icon: Sparkles, label: "Goals" },
   { href: "/documents", icon: FileText, label: "Documents" },
   { href: "/reminders", icon: Bell, label: "Reminders" },
@@ -39,7 +40,7 @@ const mobileNavItems: Array<{
   label: string;
 }> = [
   { href: "/dashboard", icon: Home, label: "Dashboard" },
-  { href: "/goals", icon: Target, label: "Goals" },
+  { href: "/contracts", icon: CreditCard, label: "Contracts" },
   { href: "/documents", icon: FileText, label: "Documents" },
   { href: "/reminders", icon: Bell, label: "Reminders" },
   { href: "/insights", icon: Sparkles, label: "Insights" },

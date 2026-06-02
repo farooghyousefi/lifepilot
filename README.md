@@ -61,7 +61,7 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 
 ## Product UI Expansion
 
-The web app now includes a calm Life Pilot dashboard shell with shared navigation and local mock workspaces for goals, documents, reminders, insights, vault, AI assistant, and settings. Documents, Vault, and AI Assistant are UI-only in this phase. No files are uploaded, no model calls are made, and no AWS services are contacted.
+The web app now includes a calm Life Pilot dashboard shell with shared navigation and local mock workspaces for contracts, goals, documents, reminders, insights, vault, AI assistant, and settings. The contracts workspace uses `ContractService`, so local mock mode and the future API mode share the same UI boundary. Documents, Vault, and AI Assistant are UI-only in this phase. No files are uploaded, no model calls are made, and no AWS services are contacted.
 
 ## Getting Started
 
@@ -90,6 +90,7 @@ Local web routes:
 ```text
 http://localhost:3000/
 http://localhost:3000/dashboard
+http://localhost:3000/contracts
 http://localhost:3000/goals
 http://localhost:3000/documents
 http://localhost:3000/reminders
