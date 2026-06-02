@@ -11,6 +11,8 @@ Both clients currently use `@lifepilot/api-client` with mock data. The web dashb
 
 Current web product routes:
 
+- `/login`: public mock sign-in UI
+- `/register`: public mock account creation UI
 - `/dashboard`: overview dashboard
 - `/contracts`: contract overview, summaries, contract cards, and local add-contract form through `ContractService`
 - `/goals`: goals and focus areas
@@ -22,6 +24,13 @@ Current web product routes:
 - `/settings`: settings placeholder
 
 These routes are frontend-only mock surfaces. They do not upload documents, call AI providers, connect to AWS, or store real user data.
+
+Route boundaries are documented in `apps/web/src/navigation/routes.ts`:
+
+- Public routes: `/`, `/login`, `/register`
+- App routes: `/dashboard`, `/contracts`, `/documents`, `/vault`, `/reminders`, `/insights`, `/ai-assistant`, `/settings`
+
+The app routes are prepared as protected areas, but no hard auth guard is enforced until real Cognito integration is implemented.
 
 ## Phase 2 Contract Dashboard
 
@@ -40,9 +49,18 @@ Current dashboard scope:
 
 ## Shared Packages
 
-- `@lifepilot/shared`: Domain contracts for goals, reminders, documents, vault items, contracts, priorities, and API results.
-- `@lifepilot/api-client`: Mock-first client with contract, document, and vault mocks plus a `baseUrl` escape hatch for later API Gateway calls.
+- `@lifepilot/shared`: Domain contracts for users, auth sessions, goals, reminders, documents, vault items, contracts, priorities, and API results.
+- `@lifepilot/api-client`: Mock-first client with auth header helpers, contract, document, and vault mocks plus a `baseUrl` escape hatch for later API Gateway calls.
 - `@lifepilot/ui`: Web UI primitives used by the landing page.
+
+## Phase 6 Auth Foundation
+
+The web auth boundary is prepared without real authentication:
+
+- `apps/web/src/services/auth` defines `AuthService`, `MockAuthService`, and a future `CognitoAuthService`.
+- `/login` and `/register` use mock flows only.
+- The dashboard header includes a mock user avatar and sign-out action.
+- API client auth helpers can attach a bearer header later, but no real token is created in this phase.
 
 ## Phase 3 Contract Backend Foundation
 
@@ -71,5 +89,7 @@ The CDK stack prepares:
 - S3 bucket for documents
 - REST API resources protected by Cognito authorizer
 - Inline placeholder Lambda functions with least-privilege grants
+
+Lambda placeholders are prepared to read the future authenticated user id from API Gateway Cognito JWT claims, using `claims.sub`. Frontend-supplied `userId` must not be trusted for real data access.
 
 The stack is intentionally synth-only in this foundation.

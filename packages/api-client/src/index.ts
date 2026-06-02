@@ -267,17 +267,38 @@ export const calculateContractSummary = (
 });
 
 export interface LifePilotClientOptions {
+  authToken?: string;
   baseUrl?: string;
   useMockData?: boolean;
 }
 
 export class LifePilotApiClient {
+  private authToken?: string;
   private readonly baseUrl: string;
   private readonly useMockData: boolean;
 
   constructor(options: LifePilotClientOptions = {}) {
+    this.authToken = options.authToken;
     this.baseUrl = options.baseUrl ?? "http://localhost:3000/api";
     this.useMockData = options.useMockData ?? true;
+  }
+
+  setAuthToken(token: string): void {
+    this.authToken = token;
+  }
+
+  clearAuthToken(): void {
+    this.authToken = undefined;
+  }
+
+  getAuthHeaders(): Record<string, string> {
+    if (!this.authToken) {
+      return {};
+    }
+
+    return {
+      authorization: `Bearer ${this.authToken}`,
+    };
   }
 
   async getSnapshot(): Promise<ApiResult<LifePilotSnapshot>> {
@@ -289,7 +310,9 @@ export class LifePilotApiClient {
       };
     }
 
-    const response = await fetch(`${this.baseUrl}/snapshot`);
+    const response = await fetch(`${this.baseUrl}/snapshot`, {
+      headers: this.getAuthHeaders(),
+    });
 
     if (!response.ok) {
       throw new Error(`Life Pilot API request failed: ${response.status}`);
@@ -307,7 +330,9 @@ export class LifePilotApiClient {
       };
     }
 
-    const response = await fetch(`${this.baseUrl}/contracts`);
+    const response = await fetch(`${this.baseUrl}/contracts`, {
+      headers: this.getAuthHeaders(),
+    });
 
     if (!response.ok) {
       throw new Error(`Life Pilot API request failed: ${response.status}`);
@@ -330,6 +355,7 @@ export class LifePilotApiClient {
     const response = await fetch(`${this.baseUrl}/contracts`, {
       body: JSON.stringify(input),
       headers: {
+        ...this.getAuthHeaders(),
         "content-type": "application/json",
       },
       method: "POST",
@@ -351,7 +377,9 @@ export class LifePilotApiClient {
       };
     }
 
-    const response = await fetch(`${this.baseUrl}/contracts/${contractId}`);
+    const response = await fetch(`${this.baseUrl}/contracts/${contractId}`, {
+      headers: this.getAuthHeaders(),
+    });
 
     if (!response.ok) {
       throw new Error(`Life Pilot API request failed: ${response.status}`);
@@ -375,6 +403,7 @@ export class LifePilotApiClient {
     }
 
     const response = await fetch(`${this.baseUrl}/contracts/${contractId}`, {
+      headers: this.getAuthHeaders(),
       method: "DELETE",
     });
 
@@ -396,7 +425,9 @@ export class LifePilotApiClient {
       };
     }
 
-    const response = await fetch(`${this.baseUrl}/documents`);
+    const response = await fetch(`${this.baseUrl}/documents`, {
+      headers: this.getAuthHeaders(),
+    });
 
     if (!response.ok) {
       throw new Error(`Life Pilot API request failed: ${response.status}`);
@@ -414,7 +445,9 @@ export class LifePilotApiClient {
       };
     }
 
-    const response = await fetch(`${this.baseUrl}/documents/${documentId}`);
+    const response = await fetch(`${this.baseUrl}/documents/${documentId}`, {
+      headers: this.getAuthHeaders(),
+    });
 
     if (!response.ok) {
       throw new Error(`Life Pilot API request failed: ${response.status}`);
@@ -437,6 +470,7 @@ export class LifePilotApiClient {
     const response = await fetch(`${this.baseUrl}/documents`, {
       body: JSON.stringify(input),
       headers: {
+        ...this.getAuthHeaders(),
         "content-type": "application/json",
       },
       method: "POST",
@@ -464,6 +498,7 @@ export class LifePilotApiClient {
     }
 
     const response = await fetch(`${this.baseUrl}/documents/${documentId}`, {
+      headers: this.getAuthHeaders(),
       method: "DELETE",
     });
 
@@ -485,7 +520,9 @@ export class LifePilotApiClient {
       };
     }
 
-    const response = await fetch(`${this.baseUrl}/vault`);
+    const response = await fetch(`${this.baseUrl}/vault`, {
+      headers: this.getAuthHeaders(),
+    });
 
     if (!response.ok) {
       throw new Error(`Life Pilot API request failed: ${response.status}`);
@@ -498,6 +535,19 @@ export class LifePilotApiClient {
 export const createLifePilotClient = (
   options?: LifePilotClientOptions,
 ): LifePilotApiClient => new LifePilotApiClient(options);
+
+const defaultClient = createLifePilotClient();
+
+export const setAuthToken = (token: string): void => {
+  defaultClient.setAuthToken(token);
+};
+
+export const clearAuthToken = (): void => {
+  defaultClient.clearAuthToken();
+};
+
+export const getAuthHeaders = (): Record<string, string> =>
+  defaultClient.getAuthHeaders();
 
 export const listContracts = (
   options?: LifePilotClientOptions,

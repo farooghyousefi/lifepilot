@@ -4,11 +4,13 @@ Life Pilot is still in demo mode. Do not upload or enter real documents, real us
 
 ## Current Phase
 
+- Auth is mock-only.
 - Documents and Vault are mock UI only.
 - Demo upload stores metadata in local frontend state only.
 - No real file is uploaded.
 - No AWS resource is deployed.
 - No document data is written to S3, DynamoDB, or external APIs.
+- No real user accounts, passwords, tokens, or Cognito secrets are stored.
 - No sensitive data should be logged.
 
 ## Planned AWS Boundary
@@ -19,10 +21,14 @@ Before real documents are allowed, the storage design must include:
 - No public S3 object URLs.
 - Signed URLs for temporary, scoped document access.
 - Cognito user isolation through `userId`.
+- API Gateway Cognito Authorizer for protected API routes.
+- `userId` derived from JWT claims, especially `claims.sub`, not from the frontend request body.
+- Every data query scoped to the authenticated `userId`.
 - Server-side encryption with S3/KMS.
 - Least-privilege IAM policies for document Lambdas.
 - Delete functionality before real data is accepted.
 - Audit-friendly handling that avoids sensitive payloads in logs.
+- No secrets in the repository.
 
 ## Product Rule
 

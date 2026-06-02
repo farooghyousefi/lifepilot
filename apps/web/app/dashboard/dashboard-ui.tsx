@@ -2,7 +2,6 @@ import {
   BarChart3,
   Bell,
   Bot,
-  ChevronDown,
   ChevronRight,
   CreditCard,
   FileText,
@@ -15,6 +14,7 @@ import {
   Sun,
   type LucideIcon,
 } from "lucide-react";
+import { UserMenu } from "./user-menu";
 
 export type Accent = "blue" | "green" | "orange" | "purple" | "red";
 
@@ -226,12 +226,7 @@ export function DashboardHeader() {
           >
             <Bell className="size-6" aria-hidden="true" />
           </button>
-          <div className="flex items-center gap-2">
-            <div className="flex size-11 items-center justify-center rounded-full bg-[#2F80ED] text-sm font-bold text-white">
-              LP
-            </div>
-            <ChevronDown className="size-5 text-[#101828]" aria-hidden="true" />
-          </div>
+          <UserMenu />
         </div>
       </div>
     </header>

@@ -69,6 +69,12 @@ The `/documents` and `/vault` workspaces now include richer mock UI for document
 
 Do not use real documents in this phase. The upload flow is a demo interaction only and does not upload files or store real data. See `docs/security.md` for the planned security boundary before any real document handling.
 
+## Phase 6: Auth & Security Foundation
+
+The web app includes mock auth pages at `/login` and `/register`, an `AuthService` abstraction, shared auth types, and API client auth header helpers. Local auth is mock-only. Cognito is prepared in CDK as a synth-only foundation with a user pool, web client, and API Gateway authorizer.
+
+No real users, tokens, passwords, or Cognito secrets are stored in this phase.
+
 ## Getting Started
 
 ```bash
@@ -95,6 +101,8 @@ Local web routes:
 
 ```text
 http://localhost:3000/
+http://localhost:3000/login
+http://localhost:3000/register
 http://localhost:3000/dashboard
 http://localhost:3000/contracts
 http://localhost:3000/goals

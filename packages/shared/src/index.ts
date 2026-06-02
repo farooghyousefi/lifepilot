@@ -10,6 +10,10 @@ export type LifeArea =
 
 export type Priority = "low" | "medium" | "high";
 
+export type AuthProvider = "mock" | "cognito";
+
+export type UserRole = "user" | "admin";
+
 export type ContractCategory =
   | "internet"
   | "fitness"
@@ -50,6 +54,21 @@ export interface LifeGoal {
   priority: Priority;
   targetDate?: ISODateString;
   progress: number;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  provider: AuthProvider;
+}
+
+export interface AuthSession {
+  user: User;
+  provider: AuthProvider;
+  expiresAt?: ISODateString;
+  accessToken?: string;
 }
 
 export interface Reminder {

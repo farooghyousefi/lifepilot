@@ -1,4 +1,5 @@
 import {
+  CfnOutput,
   Duration,
   RemovalPolicy,
   Stack,
@@ -33,12 +34,23 @@ export class LifePilotFoundationStack extends Stack {
       removalPolicy: RemovalPolicy.RETAIN,
     });
 
-    new UserPoolClient(this, "WebUserPoolClient", {
+    const webUserPoolClient = new UserPoolClient(this, "WebUserPoolClient", {
       userPool,
       authFlows: {
         userSrp: true,
       },
       preventUserExistenceErrors: true,
+    });
+
+    new CfnOutput(this, "UserPoolId", {
+      value: userPool.userPoolId,
+      description: "Prepared Cognito User Pool id. Synth-only, not deployed.",
+    });
+
+    new CfnOutput(this, "WebUserPoolClientId", {
+      value: webUserPoolClient.userPoolClientId,
+      description:
+        "Prepared Cognito app client id. Public client id only, no secret.",
     });
 
     const goalsTable = this.createTable("GoalsTable", "userId", "goalId");
@@ -70,6 +82,7 @@ export class LifePilotFoundationStack extends Stack {
       "ContractsFunction",
       "contracts",
       {
+        AUTH_PROVIDER: "cognito",
         CONTRACTS_TABLE_NAME: contractsTable.tableName,
         GOALS_TABLE_NAME: goalsTable.tableName,
         DOCUMENTS_TABLE_NAME: documentsTable.tableName,
@@ -81,6 +94,7 @@ export class LifePilotFoundationStack extends Stack {
       "DocumentsFunction",
       "documents",
       {
+        AUTH_PROVIDER: "cognito",
         DOCUMENTS_TABLE_NAME: documentsTable.tableName,
         DOCUMENTS_BUCKET_NAME: documentsBucket.bucketName,
       },
@@ -90,6 +104,7 @@ export class LifePilotFoundationStack extends Stack {
       "RemindersFunction",
       "reminders",
       {
+        AUTH_PROVIDER: "cognito",
         REMINDERS_TABLE_NAME: remindersTable.tableName,
       },
     );
@@ -98,6 +113,7 @@ export class LifePilotFoundationStack extends Stack {
       "AiAnalysisFunction",
       "ai-analysis",
       {
+        AUTH_PROVIDER: "cognito",
         GOALS_TABLE_NAME: goalsTable.tableName,
         DOCUMENTS_TABLE_NAME: documentsTable.tableName,
       },
@@ -192,13 +208,17 @@ export class LifePilotFoundationStack extends Stack {
       timeout: Duration.seconds(10),
       environment,
       code: Code.fromInline(`
-exports.handler = async function handler() {
+exports.handler = async function handler(event) {
+  const claims = event?.requestContext?.authorizer?.claims ?? {};
+  const userId = claims.sub ?? null;
+
   return {
     statusCode: 200,
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       service: "lifepilot-${domain}",
       status: "placeholder",
+      authenticated: Boolean(userId),
       message: "Synth-only placeholder. Replace with packaged Lambda code before deployment."
     })
   };
