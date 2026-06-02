@@ -4,15 +4,30 @@ Life Pilot is split into product surfaces, shared code, serverless placeholders,
 
 ## Product Surfaces
 
-- `apps/web`: Next.js App Router landing page with Tailwind CSS.
+- `apps/web`: Next.js App Router landing page and `/dashboard` contract dashboard with Tailwind CSS.
 - `apps/mobile`: Expo React Native skeleton for the future mobile experience.
 
 Both clients currently use `@lifepilot/api-client` with mock data.
 
+## Phase 2 Contract Dashboard
+
+The `/dashboard` route provides the first contract and cost management surface. It uses local frontend state for adding contracts and mock contract data from `@lifepilot/api-client`.
+
+Current dashboard scope:
+
+- Monthly fixed cost summary
+- Active contract count
+- Critical cancellation deadline count
+- Estimated annual savings potential
+- Contract cards for provider, category, monthly cost, deadline, risk, and savings potential
+- Local-only add-contract form
+
+There is no database, no API call, and no AWS connection in this phase.
+
 ## Shared Packages
 
-- `@lifepilot/shared`: Domain contracts for goals, reminders, documents, priorities, and API results.
-- `@lifepilot/api-client`: Mock-first client with a future `baseUrl` escape hatch.
+- `@lifepilot/shared`: Domain contracts for goals, reminders, documents, contracts, priorities, and API results.
+- `@lifepilot/api-client`: Mock-first client with contract mocks, summary helpers, and a future `baseUrl` escape hatch.
 - `@lifepilot/ui`: Web UI primitives used by the landing page.
 
 ## Serverless Domains
@@ -33,4 +48,3 @@ The CDK stack prepares:
 - Inline placeholder Lambda functions with least-privilege grants
 
 The stack is intentionally synth-only in this foundation.
-

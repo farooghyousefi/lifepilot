@@ -21,12 +21,20 @@ export default async function Home() {
             </div>
             <span className="text-lg font-semibold">Life Pilot</span>
           </div>
-          <a
-            className="rounded-lg bg-graphite px-4 py-2 text-sm font-semibold text-white shadow-sm"
-            href="#foundation"
-          >
-            View foundation
-          </a>
+          <div className="flex items-center gap-3">
+            <a
+              className="hidden rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-graphite sm:inline-flex"
+              href="#foundation"
+            >
+              View foundation
+            </a>
+            <a
+              className="rounded-lg bg-graphite px-4 py-2 text-sm font-semibold text-white shadow-sm"
+              href="/dashboard"
+            >
+              Open dashboard
+            </a>
+          </div>
         </nav>
       </section>
 
@@ -83,4 +91,3 @@ export default async function Home() {
     </main>
   );
 }
-

@@ -1,4 +1,9 @@
-import type { ApiResult, LifePilotSnapshot } from "@lifepilot/shared";
+import type {
+  ApiResult,
+  Contract,
+  ContractSummary,
+  LifePilotSnapshot,
+} from "@lifepilot/shared";
 
 const mockSnapshot: LifePilotSnapshot = {
   userDisplayName: "Demo Pilot",
@@ -47,6 +52,73 @@ const mockSnapshot: LifePilotSnapshot = {
   ],
 };
 
+const mockContracts: Contract[] = [
+  {
+    id: "contract-vodafone-internet",
+    provider: "Vodafone Internet",
+    category: "internet",
+    monthlyCost: 39.99,
+    contractEnd: "2026-08-26",
+    cancellationDeadlineDays: 84,
+    status: "Kündigungsfrist in 84 Tagen",
+    riskLevel: "medium",
+    annualSavingsPotential: 240,
+  },
+  {
+    id: "contract-fitnessstudio",
+    provider: "Fitnessstudio",
+    category: "fitness",
+    monthlyCost: 29.99,
+    contractEnd: "2026-12-31",
+    cancellationDeadlineDays: 120,
+    status: "Seit 4 Monaten nicht genutzt",
+    riskLevel: "high",
+    annualSavingsPotential: 360,
+  },
+  {
+    id: "contract-stromvertrag",
+    provider: "Stromvertrag",
+    category: "energy",
+    monthlyCost: 92,
+    contractEnd: "2026-06-23",
+    cancellationDeadlineDays: 21,
+    status: "Kündigungsfrist in 21 Tagen",
+    riskLevel: "high",
+    annualSavingsPotential: 180,
+  },
+  {
+    id: "contract-handyvertrag",
+    provider: "Handyvertrag",
+    category: "mobile",
+    monthlyCost: 24.99,
+    contractEnd: "2026-10-15",
+    cancellationDeadlineDays: 136,
+    status: "Mögliche Alternative gefunden",
+    riskLevel: "low",
+    annualSavingsPotential: 120,
+  },
+];
+
+export const getMockContracts = (): Contract[] =>
+  mockContracts.map((contract) => ({ ...contract }));
+
+export const calculateContractSummary = (
+  contracts: Contract[],
+): ContractSummary => ({
+  monthlyFixedCosts: contracts.reduce(
+    (total, contract) => total + contract.monthlyCost,
+    0,
+  ),
+  activeContracts: contracts.length,
+  criticalDeadlines: contracts.filter(
+    (contract) => contract.cancellationDeadlineDays <= 30,
+  ).length,
+  annualSavingsPotential: contracts.reduce(
+    (total, contract) => total + contract.annualSavingsPotential,
+    0,
+  ),
+});
+
 export interface LifePilotClientOptions {
   baseUrl?: string;
   useMockData?: boolean;
@@ -84,5 +156,4 @@ export const createLifePilotClient = (
   options?: LifePilotClientOptions,
 ): LifePilotApiClient => new LifePilotApiClient(options);
 
-export { mockSnapshot };
-
+export { mockContracts, mockSnapshot };
