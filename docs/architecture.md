@@ -30,6 +30,17 @@ There is no database, no API call, and no AWS connection in this phase.
 - `@lifepilot/api-client`: Mock-first client with contract mocks, summary helpers, and a future `baseUrl` escape hatch.
 - `@lifepilot/ui`: Web UI primitives used by the landing page.
 
+## Phase 3 Contract Backend Foundation
+
+Contract backend preparation is in place without connecting the frontend to AWS:
+
+- `packages/shared` defines `Contract`, `ContractCategory`, `RiskLevel`, `ContractStatus`, `CreateContractInput`, and `ContractSummary`.
+- `packages/api-client` exposes `listContracts`, `createContract`, `getContract`, and `deleteContract` with mock fallback behavior.
+- `lambdas/contracts` contains handler modules for listing, creating, reading, and deleting contracts.
+- `infra/cdk` prepares a DynamoDB contracts table and API Gateway routes for the contract domain.
+
+The dashboard still uses mock data and local state. No real contract data is stored or fetched from AWS in this phase.
+
 ## Serverless Domains
 
 - `contracts`: Placeholder for contract analysis and lifecycle checks.
@@ -42,7 +53,7 @@ There is no database, no API call, and no AWS connection in this phase.
 The CDK stack prepares:
 
 - Cognito user pool and web client
-- DynamoDB tables for goals, reminders, and documents
+- DynamoDB tables for goals, reminders, documents, and contracts
 - S3 bucket for documents
 - REST API resources protected by Cognito authorizer
 - Inline placeholder Lambda functions with least-privilege grants

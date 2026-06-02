@@ -44,7 +44,7 @@ export function ContractCard({ contract }: ContractCardProps) {
             {contract.provider}
           </h2>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            {contract.status}
+            {contract.statusLabel}
           </p>
         </div>
         <span
@@ -98,4 +98,3 @@ export function ContractCard({ contract }: ContractCardProps) {
     </article>
   );
 }
-

@@ -76,14 +76,18 @@ export function DashboardClient() {
       return;
     }
 
+    const contractId = `contract-${Date.now()}`;
+
     const newContract: Contract = {
-      id: `contract-${Date.now()}`,
+      id: contractId,
+      contractId,
       provider: form.provider.trim(),
       category: form.category,
       monthlyCost,
       contractEnd: form.contractEnd || undefined,
       cancellationDeadlineDays,
-      status: `Kündigungsfrist in ${cancellationDeadlineDays} Tagen`,
+      status: "draft",
+      statusLabel: `Kündigungsfrist in ${cancellationDeadlineDays} Tagen`,
       riskLevel: getRiskLevel(cancellationDeadlineDays),
       annualSavingsPotential: 0,
     };

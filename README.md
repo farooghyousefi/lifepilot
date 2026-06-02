@@ -37,6 +37,17 @@ The web app includes a mock contract dashboard at `/dashboard` for contract and 
 
 The dashboard currently runs with mock data only. It does not call AWS, does not use a database, and does not send contract data to any API.
 
+## Phase 3: Contract Backend Foundation
+
+The AWS backend foundation now prepares contract persistence and routes without deploying them:
+
+- DynamoDB `ContractsTable` with `userId` partition key and `contractId` sort key
+- Contract Lambda handler modules for list, create, get, and delete
+- API Gateway route plan for `GET /contracts`, `POST /contracts`, `GET /contracts/{contractId}`, and `DELETE /contracts/{contractId}`
+- API client methods with mock fallback so the dashboard remains local-first
+
+No real AWS data is written in this phase.
+
 ## Getting Started
 
 ```bash

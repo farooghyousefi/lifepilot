@@ -21,6 +21,14 @@ export type ContractCategory =
 
 export type RiskLevel = "low" | "medium" | "high";
 
+export type ContractStatus =
+  | "active"
+  | "action-needed"
+  | "cancellation-window"
+  | "unused"
+  | "alternative-found"
+  | "draft";
+
 export interface LifeGoal {
   id: string;
   title: string;
@@ -48,14 +56,31 @@ export interface DocumentSummary {
 
 export interface Contract {
   id: string;
+  contractId: string;
+  userId?: string;
   provider: string;
   category: ContractCategory;
   monthlyCost: number;
   contractEnd?: ISODateString;
   cancellationDeadlineDays: number;
-  status: string;
+  status: ContractStatus;
+  statusLabel: string;
   riskLevel: RiskLevel;
   annualSavingsPotential: number;
+  createdAt?: ISODateString;
+  updatedAt?: ISODateString;
+}
+
+export interface CreateContractInput {
+  provider: string;
+  category: ContractCategory;
+  monthlyCost: number;
+  contractEnd?: ISODateString;
+  cancellationDeadlineDays: number;
+  status?: ContractStatus;
+  statusLabel?: string;
+  riskLevel?: RiskLevel;
+  annualSavingsPotential?: number;
 }
 
 export interface ContractSummary {

@@ -2,6 +2,7 @@ import type {
   ApiResult,
   Contract,
   ContractSummary,
+  CreateContractInput,
   LifePilotSnapshot,
 } from "@lifepilot/shared";
 
@@ -55,45 +56,53 @@ const mockSnapshot: LifePilotSnapshot = {
 const mockContracts: Contract[] = [
   {
     id: "contract-vodafone-internet",
+    contractId: "contract-vodafone-internet",
     provider: "Vodafone Internet",
     category: "internet",
     monthlyCost: 39.99,
     contractEnd: "2026-08-26",
     cancellationDeadlineDays: 84,
-    status: "Kündigungsfrist in 84 Tagen",
+    status: "cancellation-window",
+    statusLabel: "Kündigungsfrist in 84 Tagen",
     riskLevel: "medium",
     annualSavingsPotential: 240,
   },
   {
     id: "contract-fitnessstudio",
+    contractId: "contract-fitnessstudio",
     provider: "Fitnessstudio",
     category: "fitness",
     monthlyCost: 29.99,
     contractEnd: "2026-12-31",
     cancellationDeadlineDays: 120,
-    status: "Seit 4 Monaten nicht genutzt",
+    status: "unused",
+    statusLabel: "Seit 4 Monaten nicht genutzt",
     riskLevel: "high",
     annualSavingsPotential: 360,
   },
   {
     id: "contract-stromvertrag",
+    contractId: "contract-stromvertrag",
     provider: "Stromvertrag",
     category: "energy",
     monthlyCost: 92,
     contractEnd: "2026-06-23",
     cancellationDeadlineDays: 21,
-    status: "Kündigungsfrist in 21 Tagen",
+    status: "action-needed",
+    statusLabel: "Kündigungsfrist in 21 Tagen",
     riskLevel: "high",
     annualSavingsPotential: 180,
   },
   {
     id: "contract-handyvertrag",
+    contractId: "contract-handyvertrag",
     provider: "Handyvertrag",
     category: "mobile",
     monthlyCost: 24.99,
     contractEnd: "2026-10-15",
     cancellationDeadlineDays: 136,
-    status: "Mögliche Alternative gefunden",
+    status: "alternative-found",
+    statusLabel: "Mögliche Alternative gefunden",
     riskLevel: "low",
     annualSavingsPotential: 120,
   },
@@ -101,6 +110,32 @@ const mockContracts: Contract[] = [
 
 export const getMockContracts = (): Contract[] =>
   mockContracts.map((contract) => ({ ...contract }));
+
+const getMockContractById = (contractId: string): Contract | undefined =>
+  mockContracts.find((contract) => contract.contractId === contractId);
+
+const createMockContract = (input: CreateContractInput): Contract => {
+  const contractId = `contract-${Date.now()}`;
+  const now = new Date().toISOString();
+
+  return {
+    id: contractId,
+    contractId,
+    provider: input.provider,
+    category: input.category,
+    monthlyCost: input.monthlyCost,
+    contractEnd: input.contractEnd,
+    cancellationDeadlineDays: input.cancellationDeadlineDays,
+    status: input.status ?? "draft",
+    statusLabel:
+      input.statusLabel ??
+      `Kündigungsfrist in ${input.cancellationDeadlineDays} Tagen`,
+    riskLevel: input.riskLevel ?? "low",
+    annualSavingsPotential: input.annualSavingsPotential ?? 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+};
 
 export const calculateContractSummary = (
   contracts: Contract[],
@@ -150,10 +185,122 @@ export class LifePilotApiClient {
 
     return response.json() as Promise<ApiResult<LifePilotSnapshot>>;
   }
+
+  async listContracts(): Promise<ApiResult<Contract[]>> {
+    if (this.useMockData) {
+      return {
+        data: getMockContracts(),
+        requestId: "mock-contracts-list",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(`${this.baseUrl}/contracts`);
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<ApiResult<Contract[]>>;
+  }
+
+  async createContract(
+    input: CreateContractInput,
+  ): Promise<ApiResult<Contract>> {
+    if (this.useMockData) {
+      return {
+        data: createMockContract(input),
+        requestId: "mock-contracts-create",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(`${this.baseUrl}/contracts`, {
+      body: JSON.stringify(input),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<ApiResult<Contract>>;
+  }
+
+  async getContract(contractId: string): Promise<ApiResult<Contract | null>> {
+    if (this.useMockData) {
+      return {
+        data: getMockContractById(contractId) ?? null,
+        requestId: "mock-contracts-get",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(`${this.baseUrl}/contracts/${contractId}`);
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<ApiResult<Contract | null>>;
+  }
+
+  async deleteContract(
+    contractId: string,
+  ): Promise<ApiResult<{ contractId: string; deleted: boolean }>> {
+    if (this.useMockData) {
+      return {
+        data: {
+          contractId,
+          deleted: Boolean(getMockContractById(contractId)),
+        },
+        requestId: "mock-contracts-delete",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(`${this.baseUrl}/contracts/${contractId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<
+      ApiResult<{ contractId: string; deleted: boolean }>
+    >;
+  }
 }
 
 export const createLifePilotClient = (
   options?: LifePilotClientOptions,
 ): LifePilotApiClient => new LifePilotApiClient(options);
+
+export const listContracts = (
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<Contract[]>> =>
+  createLifePilotClient(options).listContracts();
+
+export const createContract = (
+  input: CreateContractInput,
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<Contract>> =>
+  createLifePilotClient(options).createContract(input);
+
+export const getContract = (
+  contractId: string,
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<Contract | null>> =>
+  createLifePilotClient(options).getContract(contractId);
+
+export const deleteContract = (
+  contractId: string,
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<{ contractId: string; deleted: boolean }>> =>
+  createLifePilotClient(options).deleteContract(contractId);
 
 export { mockContracts, mockSnapshot };

@@ -47,6 +47,11 @@ export class LifePilotFoundationStack extends Stack {
       "userId",
       "reminderId",
     );
+    const contractsTable = this.createTable(
+      "ContractsTable",
+      "userId",
+      "contractId",
+    );
     const documentsTable = this.createTable(
       "DocumentsTable",
       "userId",
@@ -65,6 +70,7 @@ export class LifePilotFoundationStack extends Stack {
       "ContractsFunction",
       "contracts",
       {
+        CONTRACTS_TABLE_NAME: contractsTable.tableName,
         GOALS_TABLE_NAME: goalsTable.tableName,
         DOCUMENTS_TABLE_NAME: documentsTable.tableName,
         DOCUMENTS_BUCKET_NAME: documentsBucket.bucketName,
@@ -98,6 +104,7 @@ export class LifePilotFoundationStack extends Stack {
     );
 
     goalsTable.grantReadWriteData(contractsFunction);
+    contractsTable.grantReadWriteData(contractsFunction);
     documentsTable.grantReadWriteData(contractsFunction);
     documentsTable.grantReadWriteData(documentsFunction);
     remindersTable.grantReadWriteData(remindersFunction);
@@ -120,9 +127,29 @@ export class LifePilotFoundationStack extends Stack {
       authorizer,
     };
 
-    api.root
-      .addResource("contracts")
-      .addMethod("GET", new LambdaIntegration(contractsFunction), auth);
+    const contractsResource = api.root.addResource("contracts");
+    contractsResource.addMethod(
+      "GET",
+      new LambdaIntegration(contractsFunction),
+      auth,
+    );
+    contractsResource.addMethod(
+      "POST",
+      new LambdaIntegration(contractsFunction),
+      auth,
+    );
+
+    const contractResource = contractsResource.addResource("{contractId}");
+    contractResource.addMethod(
+      "GET",
+      new LambdaIntegration(contractsFunction),
+      auth,
+    );
+    contractResource.addMethod(
+      "DELETE",
+      new LambdaIntegration(contractsFunction),
+      auth,
+    );
     api.root
       .addResource("documents")
       .addMethod("POST", new LambdaIntegration(documentsFunction), auth);
@@ -148,6 +175,8 @@ export class LifePilotFoundationStack extends Stack {
       pointInTimeRecoverySpecification: {
         pointInTimeRecoveryEnabled: true,
       },
+      // Development foundation only: retain data on stack removal while the
+      // environment model is undefined. Revisit per environment before deploy.
       removalPolicy: RemovalPolicy.RETAIN,
     });
   }
