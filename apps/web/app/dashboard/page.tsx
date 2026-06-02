@@ -4,10 +4,9 @@ import { DashboardClient } from "./dashboard-client";
 export const metadata: Metadata = {
   title: "Life Pilot Dashboard",
   description:
-    "Mock dashboard for contracts, costs, deadlines, and savings potential.",
+    "A calm personal dashboard for contracts, documents, reminders, and AI insights.",
 };
 
 export default function DashboardPage() {
   return <DashboardClient />;
 }
-
