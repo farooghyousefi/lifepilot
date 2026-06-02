@@ -59,6 +59,10 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 
 `NEXT_PUBLIC_USE_MOCKS=true` uses `MockContractService` with local mock contracts. Set `NEXT_PUBLIC_USE_MOCKS=false` plus `NEXT_PUBLIC_API_BASE_URL` later to use `ApiContractService`, which delegates to `@lifepilot/api-client` and is ready for an API Gateway URL. This is only a technical switch; no AWS deployment is performed by the web app.
 
+## Product UI Expansion
+
+The web app now includes a calm Life Pilot dashboard shell with shared navigation and local mock workspaces for goals, documents, reminders, insights, vault, AI assistant, and settings. Documents, Vault, and AI Assistant are UI-only in this phase. No files are uploaded, no model calls are made, and no AWS services are contacted.
+
 ## Getting Started
 
 ```bash
@@ -86,6 +90,13 @@ Local web routes:
 ```text
 http://localhost:3000/
 http://localhost:3000/dashboard
+http://localhost:3000/goals
+http://localhost:3000/documents
+http://localhost:3000/reminders
+http://localhost:3000/insights
+http://localhost:3000/vault
+http://localhost:3000/ai-assistant
+http://localhost:3000/settings
 ```
 
 ## AWS Boundary

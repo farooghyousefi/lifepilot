@@ -19,28 +19,30 @@ import {
 export type Accent = "blue" | "green" | "orange" | "purple" | "red";
 
 const sidebarItems: Array<{
+  href: string;
   icon: LucideIcon;
   label: string;
 }> = [
-  { icon: Home, label: "Dashboard" },
-  { icon: Sparkles, label: "Goals" },
-  { icon: FileText, label: "Documents" },
-  { icon: Bell, label: "Reminders" },
-  { icon: BarChart3, label: "Insights" },
-  { icon: Bot, label: "AI Assistant" },
-  { icon: LockKeyhole, label: "Vault" },
-  { icon: Settings, label: "Settings" },
+  { href: "/dashboard", icon: Home, label: "Dashboard" },
+  { href: "/goals", icon: Sparkles, label: "Goals" },
+  { href: "/documents", icon: FileText, label: "Documents" },
+  { href: "/reminders", icon: Bell, label: "Reminders" },
+  { href: "/insights", icon: BarChart3, label: "Insights" },
+  { href: "/ai-assistant", icon: Bot, label: "AI Assistant" },
+  { href: "/vault", icon: LockKeyhole, label: "Vault" },
+  { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
 const mobileNavItems: Array<{
+  href: string;
   icon: LucideIcon;
   label: string;
 }> = [
-  { icon: Home, label: "Dashboard" },
-  { icon: Target, label: "Goals" },
-  { icon: FileText, label: "Documents" },
-  { icon: Bell, label: "Reminders" },
-  { icon: Sparkles, label: "Insights" },
+  { href: "/dashboard", icon: Home, label: "Dashboard" },
+  { href: "/goals", icon: Target, label: "Goals" },
+  { href: "/documents", icon: FileText, label: "Documents" },
+  { href: "/reminders", icon: Bell, label: "Reminders" },
+  { href: "/insights", icon: Sparkles, label: "Insights" },
 ];
 
 const accentClasses: Record<
@@ -96,7 +98,11 @@ const accentClasses: Record<
   },
 };
 
-export function Sidebar() {
+export interface NavigationProps {
+  activeItem?: string;
+}
+
+export function Sidebar({ activeItem = "Dashboard" }: NavigationProps) {
   return (
     <aside className="hidden border-r border-[#ECEFEB] bg-white px-7 py-8 md:block">
       <div className="sticky top-8 flex h-[calc(100vh-64px)] flex-col">
@@ -105,8 +111,8 @@ export function Sidebar() {
         </a>
 
         <nav className="mt-10 grid gap-2">
-          {sidebarItems.map(({ icon: Icon, label }) => {
-            const isActive = label === "Dashboard";
+          {sidebarItems.map(({ href, icon: Icon, label }) => {
+            const isActive = label === activeItem;
 
             return (
               <a
@@ -115,7 +121,7 @@ export function Sidebar() {
                     ? "bg-[#EAF7F0] text-[#2FA779]"
                     : "text-[#6B7280] hover:bg-[#F7F8F5] hover:text-[#101828]"
                 }`}
-                href={isActive ? "/dashboard" : "#"}
+                href={href}
                 key={label}
               >
                 <Icon
@@ -146,6 +152,25 @@ export function Sidebar() {
         </div>
       </div>
     </aside>
+  );
+}
+
+export function LifePilotShell({
+  activeItem = "Dashboard",
+  children,
+}: NavigationProps & { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-[#FBFAF8] text-life-text">
+      <div className="mx-auto grid min-h-screen w-full max-w-[1640px] bg-white md:grid-cols-[300px_1fr]">
+        <Sidebar activeItem={activeItem} />
+        <div className="min-w-0 bg-[#FCFBFA] pb-24 md:pb-0">
+          <main className="mx-auto max-w-[1240px] px-5 py-5 sm:px-8 md:px-10 md:py-9 xl:px-12">
+            {children}
+          </main>
+        </div>
+      </div>
+      <MobileBottomNav activeItem={activeItem} />
+    </div>
   );
 }
 
@@ -206,6 +231,56 @@ export function DashboardHeader() {
             <ChevronDown className="size-5 text-[#101828]" aria-hidden="true" />
           </div>
         </div>
+      </div>
+    </header>
+  );
+}
+
+export function PageHeader({
+  eyebrow,
+  subtitle,
+  title,
+}: {
+  eyebrow: string;
+  subtitle: string;
+  title: string;
+}) {
+  return (
+    <header>
+      <div className="flex items-center justify-between gap-4 md:hidden">
+        <button
+          aria-label="Open menu"
+          className="flex size-10 items-center justify-center rounded-2xl text-[#101828]"
+          type="button"
+        >
+          <Menu className="size-6" aria-hidden="true" />
+        </button>
+        <p className="text-lg font-bold text-[#101828]">Life Pilot</p>
+        <button
+          aria-label="Notifications"
+          className="flex size-10 items-center justify-center rounded-2xl text-[#101828]"
+          type="button"
+        >
+          <Bell className="size-5" aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="mt-8 flex items-start justify-between gap-4 md:mt-0">
+        <div>
+          <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#2FA779]">
+            {eyebrow}
+          </p>
+          <h1 className="mt-2 text-[30px] font-bold leading-tight tracking-[-0.01em] text-[#101828] md:text-[36px]">
+            {title}
+          </h1>
+          <p className="mt-2 max-w-2xl text-[15px] font-medium leading-7 text-[#667085]">
+            {subtitle}
+          </p>
+        </div>
+        <span className="hidden items-center gap-2 rounded-full border border-[#E7EAE5] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#475467] shadow-button md:inline-flex">
+          <span className="size-2.5 rounded-full bg-[#12B981]" />
+          Local mock mode
+        </span>
       </div>
     </header>
   );
@@ -429,19 +504,19 @@ export function InsightStripCard({
   );
 }
 
-export function MobileBottomNav() {
+export function MobileBottomNav({ activeItem = "Dashboard" }: NavigationProps) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-[#ECEFEB] bg-white px-3 pb-3 pt-2 shadow-[0_-10px_28px_rgba(16,24,40,0.08)] md:hidden">
       <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
-        {mobileNavItems.map(({ icon: Icon, label }) => {
-          const isActive = label === "Dashboard";
+        {mobileNavItems.map(({ href, icon: Icon, label }) => {
+          const isActive = label === activeItem;
 
           return (
             <a
               className={`flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-bold ${
                 isActive ? "text-[#2FA779]" : "text-[#667085]"
               }`}
-              href={isActive ? "/dashboard" : "#"}
+              href={href}
               key={label}
             >
               <Icon className="size-5" aria-hidden="true" />

@@ -4,10 +4,23 @@ Life Pilot is split into product surfaces, shared code, serverless placeholders,
 
 ## Product Surfaces
 
-- `apps/web`: Next.js App Router landing page and `/dashboard` contract dashboard with Tailwind CSS.
+- `apps/web`: Next.js App Router landing page, calm Life Pilot dashboard shell, and local mock product routes with Tailwind CSS.
 - `apps/mobile`: Expo React Native skeleton for the future mobile experience.
 
 Both clients currently use `@lifepilot/api-client` with mock data. The web dashboard accesses contracts through `apps/web/src/services/contracts` so the data source can switch from mocks to an API Gateway-backed client later.
+
+Current web product routes:
+
+- `/dashboard`: overview dashboard
+- `/goals`: goals and focus areas
+- `/documents`: document overview and upload preparation UI
+- `/reminders`: reminder agenda
+- `/insights`: recommendation overview
+- `/vault`: secure vault preparation UI
+- `/ai-assistant`: assistant experience placeholder
+- `/settings`: settings placeholder
+
+These routes are frontend-only mock surfaces. They do not upload documents, call AI providers, connect to AWS, or store real user data.
 
 ## Phase 2 Contract Dashboard
 
