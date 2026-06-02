@@ -7,11 +7,11 @@ Life Pilot is split into product surfaces, shared code, serverless placeholders,
 - `apps/web`: Next.js App Router landing page and `/dashboard` contract dashboard with Tailwind CSS.
 - `apps/mobile`: Expo React Native skeleton for the future mobile experience.
 
-Both clients currently use `@lifepilot/api-client` with mock data.
+Both clients currently use `@lifepilot/api-client` with mock data. The web dashboard accesses contracts through `apps/web/src/services/contracts` so the data source can switch from mocks to an API Gateway-backed client later.
 
 ## Phase 2 Contract Dashboard
 
-The `/dashboard` route provides the first contract and cost management surface. It uses local frontend state for adding contracts and mock contract data from `@lifepilot/api-client`.
+The `/dashboard` route provides the first contract and cost management surface. It loads contracts through `ContractService`, which selects either `MockContractService` or `ApiContractService`.
 
 Current dashboard scope:
 
@@ -20,14 +20,14 @@ Current dashboard scope:
 - Critical cancellation deadline count
 - Estimated annual savings potential
 - Contract cards for provider, category, monthly cost, deadline, risk, and savings potential
-- Local-only add-contract form
+- Add-contract form backed by the same contract service
 
-There is no database, no API call, and no AWS connection in this phase.
+`NEXT_PUBLIC_USE_MOCKS=true` keeps local mock data enabled. `NEXT_PUBLIC_USE_MOCKS=false` switches the service to API client requests against `NEXT_PUBLIC_API_BASE_URL`. There is still no AWS deployment or real user data in local development.
 
 ## Shared Packages
 
 - `@lifepilot/shared`: Domain contracts for goals, reminders, documents, contracts, priorities, and API results.
-- `@lifepilot/api-client`: Mock-first client with contract mocks, summary helpers, and a future `baseUrl` escape hatch.
+- `@lifepilot/api-client`: Mock-first client with contract mocks, summary helpers, and a `baseUrl` escape hatch for later API Gateway calls.
 - `@lifepilot/ui`: Web UI primitives used by the landing page.
 
 ## Phase 3 Contract Backend Foundation

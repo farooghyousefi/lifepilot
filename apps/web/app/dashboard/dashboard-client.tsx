@@ -1,11 +1,8 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
-import {
-  calculateContractSummary,
-  getMockContracts,
-} from "@lifepilot/api-client";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Contract, ContractCategory, RiskLevel } from "@lifepilot/shared";
+import { contractService } from "../../src/services/contracts";
 import { ContractCard } from "./contract-card";
 
 const categoryOptions: Array<{ label: string; value: ContractCategory }> = [
@@ -49,17 +46,48 @@ const getRiskLevel = (deadlineDays: number): RiskLevel => {
 };
 
 export function DashboardClient() {
-  const [contracts, setContracts] = useState<Contract[]>(() =>
-    getMockContracts(),
-  );
+  const [contracts, setContracts] = useState<Contract[]>([]);
   const [form, setForm] = useState(initialForm);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const summary = useMemo(
-    () => calculateContractSummary(contracts),
+    () => contractService.getSummary(contracts),
     [contracts],
   );
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadContracts = async () => {
+      try {
+        const loadedContracts = await contractService.listContracts();
+
+        if (isMounted) {
+          setContracts(loadedContracts);
+          setErrorMessage(null);
+        }
+      } catch {
+        if (isMounted) {
+          setErrorMessage(
+            "Verträge konnten nicht geladen werden. Bitte prüfe die lokale API-Konfiguration.",
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadContracts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const monthlyCost = Number.parseFloat(form.monthlyCost);
@@ -76,24 +104,27 @@ export function DashboardClient() {
       return;
     }
 
-    const contractId = `contract-${Date.now()}`;
+    try {
+      const newContract = await contractService.createContract({
+        provider: form.provider.trim(),
+        category: form.category,
+        monthlyCost,
+        contractEnd: form.contractEnd || undefined,
+        cancellationDeadlineDays,
+        status: "draft",
+        statusLabel: `Kündigungsfrist in ${cancellationDeadlineDays} Tagen`,
+        riskLevel: getRiskLevel(cancellationDeadlineDays),
+        annualSavingsPotential: 0,
+      });
 
-    const newContract: Contract = {
-      id: contractId,
-      contractId,
-      provider: form.provider.trim(),
-      category: form.category,
-      monthlyCost,
-      contractEnd: form.contractEnd || undefined,
-      cancellationDeadlineDays,
-      status: "draft",
-      statusLabel: `Kündigungsfrist in ${cancellationDeadlineDays} Tagen`,
-      riskLevel: getRiskLevel(cancellationDeadlineDays),
-      annualSavingsPotential: 0,
-    };
-
-    setContracts((currentContracts) => [newContract, ...currentContracts]);
-    setForm(initialForm);
+      setContracts((currentContracts) => [newContract, ...currentContracts]);
+      setForm(initialForm);
+      setErrorMessage(null);
+    } catch {
+      setErrorMessage(
+        "Vertrag konnte nicht hinzugefügt werden. Bitte prüfe die lokale API-Konfiguration.",
+      );
+    }
   };
 
   return (
@@ -146,13 +177,24 @@ export function DashboardClient() {
                   Vertragsliste
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Mock-Daten für Vertragskosten, Risiken und Sparpotenziale.
+                  Geladen über den Contract Service mit lokaler Mock-Option.
                 </p>
               </div>
+              {errorMessage ? (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">
+                  {errorMessage}
+                </div>
+              ) : null}
               <div className="grid gap-4">
-                {contracts.map((contract) => (
-                  <ContractCard contract={contract} key={contract.id} />
-                ))}
+                {isLoading ? (
+                  <div className="rounded-lg border border-slate-200 bg-white p-5 text-sm font-semibold text-slate-600 shadow-sm">
+                    Verträge werden geladen...
+                  </div>
+                ) : (
+                  contracts.map((contract) => (
+                    <ContractCard contract={contract} key={contract.id} />
+                  ))
+                )}
               </div>
             </div>
 

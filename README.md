@@ -48,6 +48,17 @@ The AWS backend foundation now prepares contract persistence and routes without 
 
 No real AWS data is written in this phase.
 
+## Phase 4: Contract Service Mode
+
+The dashboard loads contracts through `apps/web/src/services/contracts` instead of importing mock data directly. Local development defaults to mocks:
+
+```bash
+NEXT_PUBLIC_USE_MOCKS=true
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
+```
+
+`NEXT_PUBLIC_USE_MOCKS=true` uses `MockContractService` with local mock contracts. Set `NEXT_PUBLIC_USE_MOCKS=false` plus `NEXT_PUBLIC_API_BASE_URL` later to use `ApiContractService`, which delegates to `@lifepilot/api-client` and is ready for an API Gateway URL. This is only a technical switch; no AWS deployment is performed by the web app.
+
 ## Getting Started
 
 ```bash
