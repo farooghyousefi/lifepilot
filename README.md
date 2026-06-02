@@ -63,6 +63,12 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 
 The web app now includes a calm Life Pilot dashboard shell with shared navigation and local mock workspaces for contracts, goals, documents, reminders, insights, vault, AI assistant, and settings. The contracts workspace uses `ContractService`, so local mock mode and the future API mode share the same UI boundary. Documents, Vault, and AI Assistant are UI-only in this phase. No files are uploaded, no model calls are made, and no AWS services are contacted.
 
+## Phase 5: Documents & Vault
+
+The `/documents` and `/vault` workspaces now include richer mock UI for document organization, demo upload metadata, document details, protected vault items, and security-by-design messaging. They use shared document and vault types plus mock-first API client methods.
+
+Do not use real documents in this phase. The upload flow is a demo interaction only and does not upload files or store real data. See `docs/security.md` for the planned security boundary before any real document handling.
+
 ## Getting Started
 
 ```bash

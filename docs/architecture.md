@@ -14,10 +14,10 @@ Current web product routes:
 - `/dashboard`: overview dashboard
 - `/contracts`: contract overview, summaries, contract cards, and local add-contract form through `ContractService`
 - `/goals`: goals and focus areas
-- `/documents`: document overview and upload preparation UI
+- `/documents`: document overview, category filtering, demo upload metadata, and detail panel
 - `/reminders`: reminder agenda
 - `/insights`: recommendation overview
-- `/vault`: secure vault preparation UI
+- `/vault`: protected demo document list and security-by-design preparation UI
 - `/ai-assistant`: assistant experience placeholder
 - `/settings`: settings placeholder
 
@@ -40,8 +40,8 @@ Current dashboard scope:
 
 ## Shared Packages
 
-- `@lifepilot/shared`: Domain contracts for goals, reminders, documents, contracts, priorities, and API results.
-- `@lifepilot/api-client`: Mock-first client with contract mocks, summary helpers, and a `baseUrl` escape hatch for later API Gateway calls.
+- `@lifepilot/shared`: Domain contracts for goals, reminders, documents, vault items, contracts, priorities, and API results.
+- `@lifepilot/api-client`: Mock-first client with contract, document, and vault mocks plus a `baseUrl` escape hatch for later API Gateway calls.
 - `@lifepilot/ui`: Web UI primitives used by the landing page.
 
 ## Phase 3 Contract Backend Foundation

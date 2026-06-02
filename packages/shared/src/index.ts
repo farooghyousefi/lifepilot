@@ -29,6 +29,20 @@ export type ContractStatus =
   | "alternative-found"
   | "draft";
 
+export type DocumentCategory =
+  | "contracts"
+  | "insurance"
+  | "finance"
+  | "identity"
+  | "bills"
+  | "other";
+
+export type DocumentStatus =
+  | "needs-review"
+  | "protected"
+  | "linked-to-contract"
+  | "expiring-soon";
+
 export interface LifeGoal {
   id: string;
   title: string;
@@ -52,6 +66,34 @@ export interface DocumentSummary {
   category: "contract" | "medical" | "finance" | "identity" | "other";
   uploadedAt: ISODateString;
   storageKey: string;
+}
+
+export interface Document {
+  id: string;
+  name: string;
+  category: DocumentCategory;
+  status: DocumentStatus;
+  addedAt: ISODateString;
+  linkedContract?: string;
+  securityNote: string;
+  recommendedAction: string;
+  notes?: string;
+}
+
+export interface CreateDocumentInput {
+  name: string;
+  category: DocumentCategory;
+  status: DocumentStatus;
+  notes?: string;
+}
+
+export interface VaultItem {
+  id: string;
+  documentId: string;
+  name: string;
+  category: DocumentCategory;
+  protectedAt: ISODateString;
+  securityLevel: "demo" | "encryption-ready";
 }
 
 export interface Contract {

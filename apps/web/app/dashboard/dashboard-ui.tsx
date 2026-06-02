@@ -44,6 +44,7 @@ const mobileNavItems: Array<{
   { href: "/documents", icon: FileText, label: "Documents" },
   { href: "/reminders", icon: Bell, label: "Reminders" },
   { href: "/insights", icon: Sparkles, label: "Insights" },
+  { href: "/vault", icon: LockKeyhole, label: "Vault" },
 ];
 
 const accentClasses: Record<
@@ -508,7 +509,7 @@ export function InsightStripCard({
 export function MobileBottomNav({ activeItem = "Dashboard" }: NavigationProps) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-[#ECEFEB] bg-white px-3 pb-3 pt-2 shadow-[0_-10px_28px_rgba(16,24,40,0.08)] md:hidden">
-      <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+      <div className="mx-auto grid max-w-lg grid-cols-6 gap-1">
         {mobileNavItems.map(({ href, icon: Icon, label }) => {
           const isActive = label === activeItem;
 
