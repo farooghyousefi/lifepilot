@@ -1,0 +1,22 @@
+{
+  "name": "@lifepilot/cdk",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "cdk": "cdk",
+    "lint": "eslint bin lib --max-warnings=0",
+    "synth": "cdk synth",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.173.2",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "aws-cdk": "^2.173.2",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
+
