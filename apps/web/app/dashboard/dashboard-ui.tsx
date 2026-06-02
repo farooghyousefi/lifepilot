@@ -301,6 +301,8 @@ export function SummaryCard({
   visual,
 }: SummaryCardProps) {
   const classes = accentClasses[accent];
+  const isChart = visual === "chart";
+  const valueSizeClass = value.length > 5 ? "text-[28px]" : "text-[32px]";
 
   return (
     <article
@@ -311,16 +313,45 @@ export function SummaryCard({
           <Icon className="size-6" aria-hidden="true" strokeWidth={2.2} />
           {label}
         </div>
-        <p className="mt-8 text-[32px] font-bold leading-none text-[#101828]">
-          {value}
-        </p>
+        {isChart ? (
+          <div className="mt-8 grid grid-cols-[minmax(0,1fr)_88px] items-end gap-3">
+            <p
+              className={`min-w-0 whitespace-nowrap ${valueSizeClass} font-bold leading-none text-[#101828]`}
+            >
+              {value}
+            </p>
+            <SummaryChartVisual accent={accent} />
+          </div>
+        ) : (
+          <p
+            className={`mt-8 whitespace-nowrap ${valueSizeClass} font-bold leading-none text-[#101828]`}
+          >
+            {value}
+          </p>
+        )}
         <p className="mt-4 flex items-center gap-2 text-[13px] font-semibold text-[#667085]">
           <span className={`size-2.5 rounded-full ${classes.dot}`} />
           {meta}
         </p>
       </div>
-      <SummaryVisual accent={accent} visual={visual} />
+      {!isChart ? <SummaryVisual accent={accent} visual={visual} /> : null}
     </article>
+  );
+}
+
+function SummaryChartVisual({ accent }: { accent: Accent }) {
+  const classes = accentClasses[accent];
+
+  return (
+    <div className="flex h-14 w-[88px] items-end gap-1.5 justify-self-end opacity-90">
+      {[18, 28, 25, 38, 34, 48].map((height, index) => (
+        <span
+          className={`w-3 rounded-full ${classes.progress}`}
+          key={height + index}
+          style={{ height }}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -334,17 +365,7 @@ function SummaryVisual({
   const classes = accentClasses[accent];
 
   if (visual === "chart") {
-    return (
-      <div className="absolute bottom-8 right-6 flex h-16 w-36 items-end gap-2 opacity-90">
-        {[22, 36, 31, 48, 44, 58].map((height, index) => (
-          <span
-            className={`w-4 rounded-full ${classes.progress}`}
-            key={height + index}
-            style={{ height }}
-          />
-        ))}
-      </div>
-    );
+    return null;
   }
 
   const VisualIcon =
