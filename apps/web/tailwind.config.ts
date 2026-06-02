@@ -30,6 +30,8 @@ const config: Config = {
         "reminder-soft": "#FFF5E6",
       },
       boxShadow: {
+        button: "0 6px 18px rgba(16, 24, 40, 0.04)",
+        card: "0 18px 50px rgba(16, 24, 40, 0.055)",
         soft: "0 18px 45px rgba(30, 36, 32, 0.06)",
       },
     },

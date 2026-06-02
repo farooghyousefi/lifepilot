@@ -1,128 +1,145 @@
+import {
+  BarChart3,
+  Bell,
+  Bot,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  Home,
+  LockKeyhole,
+  Menu,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  Target,
+  type LucideIcon,
+} from "lucide-react";
+
 export type Accent = "blue" | "green" | "orange" | "purple" | "red";
 
-const sidebarItems = [
-  "Dashboard",
-  "Contracts",
-  "Documents",
-  "Reminders",
-  "Insights",
-  "AI Assistant",
-  "Vault",
-  "Settings",
-] as const;
+const sidebarItems: Array<{
+  icon: LucideIcon;
+  label: string;
+}> = [
+  { icon: Home, label: "Dashboard" },
+  { icon: Sparkles, label: "Goals" },
+  { icon: FileText, label: "Documents" },
+  { icon: Bell, label: "Reminders" },
+  { icon: BarChart3, label: "Insights" },
+  { icon: Bot, label: "AI Assistant" },
+  { icon: LockKeyhole, label: "Vault" },
+  { icon: Settings, label: "Settings" },
+];
 
-const mobileNavItems = [
-  "Dashboard",
-  "Contracts",
-  "Documents",
-  "Reminders",
-  "Insights",
-] as const;
+const mobileNavItems: Array<{
+  icon: LucideIcon;
+  label: string;
+}> = [
+  { icon: Home, label: "Dashboard" },
+  { icon: Target, label: "Goals" },
+  { icon: FileText, label: "Documents" },
+  { icon: Bell, label: "Reminders" },
+  { icon: Sparkles, label: "Insights" },
+];
 
 const accentClasses: Record<
   Accent,
   {
+    bg: string;
+    border: string;
     dot: string;
     icon: string;
-    soft: string;
+    progress: string;
     text: string;
   }
 > = {
   blue: {
-    dot: "bg-documents-blue",
-    icon: "bg-documents-soft text-documents-blue",
-    soft: "bg-documents-soft",
-    text: "text-documents-blue",
+    bg: "bg-[#F1F6FF]",
+    border: "border-[#E3ECFF]",
+    dot: "bg-[#2F80ED]",
+    icon: "bg-[#EAF2FF] text-[#2F80ED]",
+    progress: "bg-[#2F80ED]",
+    text: "text-[#2F80ED]",
   },
   green: {
-    dot: "bg-life-green",
-    icon: "bg-life-green-soft text-life-green-dark",
-    soft: "bg-life-green-soft",
-    text: "text-life-green-dark",
+    bg: "bg-[#F2FAF6]",
+    border: "border-[#DDEFE6]",
+    dot: "bg-[#35B984]",
+    icon: "bg-[#E8F7EF] text-[#2FA779]",
+    progress: "bg-[#35B984]",
+    text: "text-[#2FA779]",
   },
   orange: {
-    dot: "bg-reminder-orange",
-    icon: "bg-reminder-soft text-reminder-orange",
-    soft: "bg-reminder-soft",
-    text: "text-reminder-orange",
+    bg: "bg-[#FFF7EA]",
+    border: "border-[#FDECCB]",
+    dot: "bg-[#F59E0B]",
+    icon: "bg-[#FFF0D6] text-[#F59E0B]",
+    progress: "bg-[#F59E0B]",
+    text: "text-[#D98806]",
   },
   purple: {
-    dot: "bg-ai-purple",
-    icon: "bg-ai-soft text-ai-purple",
-    soft: "bg-ai-soft",
-    text: "text-ai-purple",
+    bg: "bg-[#F8F4FF]",
+    border: "border-[#EDE5FF]",
+    dot: "bg-[#7C5CFF]",
+    icon: "bg-[#F0EAFF] text-[#7C5CFF]",
+    progress: "bg-[#7C5CFF]",
+    text: "text-[#6F54E8]",
   },
   red: {
-    dot: "bg-danger-red",
-    icon: "bg-danger-soft text-danger-red",
-    soft: "bg-danger-soft",
-    text: "text-danger-red",
+    bg: "bg-[#FFF3F1]",
+    border: "border-[#FBE3DF]",
+    dot: "bg-[#FF5E57]",
+    icon: "bg-[#FFE8E4] text-[#EF524B]",
+    progress: "bg-[#FF5E57]",
+    text: "text-[#E14C45]",
   },
 };
 
-const getInitials = (label: string): string =>
-  label
-    .split(" ")
-    .map((word) => word[0])
-    .join("")
-    .slice(0, 2);
-
 export function Sidebar() {
   return (
-    <aside className="hidden border-r border-life-border/80 bg-white/65 px-5 py-6 md:block">
-      <div className="sticky top-6 flex h-[calc(100vh-48px)] flex-col">
-        <div className="flex items-center gap-3 px-2">
-          <div className="flex size-11 items-center justify-center rounded-2xl bg-life-green-soft text-base font-bold text-life-green-dark">
-            LP
-          </div>
-          <div>
-            <p className="text-[13px] font-semibold text-life-muted">
-              Life Pilot
-            </p>
-            <p className="text-lg font-bold text-life-text">Control Center</p>
-          </div>
-        </div>
+    <aside className="hidden border-r border-[#ECEFEB] bg-white px-7 py-8 md:block">
+      <div className="sticky top-8 flex h-[calc(100vh-64px)] flex-col">
+        <a className="text-[28px] font-bold tracking-[-0.01em] text-[#101828]" href="/">
+          Life Pilot
+        </a>
 
-        <nav className="mt-9 grid gap-1.5">
-          {sidebarItems.map((item) => {
-            const isActive = item === "Dashboard";
+        <nav className="mt-10 grid gap-2">
+          {sidebarItems.map(({ icon: Icon, label }) => {
+            const isActive = label === "Dashboard";
 
             return (
               <a
-                className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                className={`flex items-center gap-4 rounded-2xl px-4 py-4 text-[15px] font-semibold transition ${
                   isActive
-                    ? "bg-life-green-soft text-life-green-dark"
-                    : "text-life-muted hover:bg-white hover:text-life-text"
+                    ? "bg-[#EAF7F0] text-[#2FA779]"
+                    : "text-[#6B7280] hover:bg-[#F7F8F5] hover:text-[#101828]"
                 }`}
-                href={item === "Dashboard" ? "/dashboard" : "#"}
-                key={item}
+                href={isActive ? "/dashboard" : "#"}
+                key={label}
               >
-                <span
-                  className={`flex size-8 items-center justify-center rounded-xl text-[11px] font-bold ${
-                    isActive
-                      ? "bg-white text-life-green-dark"
-                      : "bg-life-bg text-life-muted"
-                  }`}
-                >
-                  {getInitials(item)}
-                </span>
-                {item}
+                <Icon
+                  aria-hidden="true"
+                  className="size-5"
+                  strokeWidth={2}
+                />
+                {label}
               </a>
             );
           })}
         </nav>
 
-        <div className="mt-auto rounded-[20px] border border-life-border bg-white p-4 shadow-soft">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-full bg-ai-soft text-sm font-bold text-ai-purple">
-              AI
+        <div className="mt-auto rounded-[22px] bg-white p-5 shadow-[0_18px_55px_rgba(16,24,40,0.08)]">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl bg-[#EAF7F0] p-2.5 text-[#2FA779]">
+              <ShieldCheck className="size-5" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-life-text">
-                Smart review
+              <p className="text-[15px] font-bold text-[#101828]">
+                Privacy First
               </p>
-              <p className="mt-0.5 text-xs leading-5 text-life-muted">
-                3 new recommendations
+              <p className="mt-2 text-[13px] leading-6 text-[#667085]">
+                Your data is encrypted end-to-end and stays under your control.
               </p>
             </div>
           </div>
@@ -136,196 +153,299 @@ export function DashboardHeader() {
   return (
     <header>
       <div className="flex items-center justify-between gap-4 md:hidden">
-        <div className="flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-2xl bg-life-green-soft text-base font-bold text-life-green-dark">
-            LP
-          </div>
-          <p className="text-base font-bold text-life-text">Life Pilot</p>
-        </div>
-        <HeaderActions />
+        <button
+          aria-label="Open menu"
+          className="flex size-10 items-center justify-center rounded-2xl text-[#101828]"
+          type="button"
+        >
+          <Menu className="size-6" aria-hidden="true" />
+        </button>
+        <p className="text-lg font-bold text-[#101828]">Life Pilot</p>
+        <button
+          aria-label="Notifications"
+          className="flex size-10 items-center justify-center rounded-2xl text-[#101828]"
+          type="button"
+        >
+          <Bell className="size-5" aria-hidden="true" />
+        </button>
       </div>
 
-      <div className="mt-8 flex flex-col gap-5 md:mt-0 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h1 className="text-[32px] font-bold leading-tight tracking-normal text-life-text">
-            Good morning
-          </h1>
-          <p className="mt-2 text-base leading-7 text-life-muted">
-            Here’s your overview for today.
-          </p>
+      <div className="mt-8 flex items-start justify-between gap-4 md:mt-0">
+        <div className="flex items-start gap-4">
+          <Sun
+            aria-hidden="true"
+            className="mt-1 size-11 text-[#101828]"
+            strokeWidth={1.8}
+          />
+          <div>
+            <h1 className="text-[26px] font-bold leading-tight tracking-[-0.01em] text-[#101828] md:text-[32px]">
+              Good morning
+            </h1>
+            <p className="mt-1 text-[13px] font-medium text-[#667085] md:text-[15px]">
+              Here’s your overview for today.
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-2 rounded-full border border-life-border bg-white px-4 py-2 text-[13px] font-semibold text-life-green-dark shadow-soft">
-            <span className="size-2 rounded-full bg-life-green" />
+        <div className="hidden items-center gap-5 md:flex">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#E7EAE5] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#475467] shadow-button">
+            <span className="size-2.5 rounded-full bg-[#12B981]" />
             All systems operational
           </span>
-          <HeaderActions desktopOnly />
+          <button
+            aria-label="Notifications"
+            className="text-[#101828]"
+            type="button"
+          >
+            <Bell className="size-6" aria-hidden="true" />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex size-11 items-center justify-center rounded-full bg-[#2F80ED] text-sm font-bold text-white">
+              LP
+            </div>
+            <ChevronDown className="size-5 text-[#101828]" aria-hidden="true" />
+          </div>
         </div>
       </div>
     </header>
   );
 }
 
-function HeaderActions({ desktopOnly = false }: { desktopOnly?: boolean }) {
-  return (
-    <div
-      className={`items-center gap-3 ${desktopOnly ? "hidden md:flex" : "flex md:hidden"}`}
-    >
-      <button
-        aria-label="Notifications"
-        className="relative flex size-11 items-center justify-center rounded-2xl border border-life-border bg-white text-sm font-bold text-life-text shadow-soft transition hover:border-life-green/50"
-        type="button"
-      >
-        N
-        <span className="absolute right-3 top-3 size-2 rounded-full bg-danger-red" />
-      </button>
-      <div className="flex size-11 items-center justify-center rounded-full bg-life-text text-sm font-bold text-white shadow-soft">
-        FY
-      </div>
-    </div>
-  );
-}
-
 export interface SummaryCardProps {
   accent: Accent;
+  icon: LucideIcon;
   label: string;
   meta: string;
   value: string;
+  visual: "bell" | "chart" | "document" | "sparkles";
 }
 
-export function SummaryCard({ accent, label, meta, value }: SummaryCardProps) {
+export function SummaryCard({
+  accent,
+  icon: Icon,
+  label,
+  meta,
+  value,
+  visual,
+}: SummaryCardProps) {
   const classes = accentClasses[accent];
 
   return (
-    <article className="rounded-[20px] border border-life-border bg-white p-5 shadow-soft">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-life-muted">{label}</p>
-          <p className="mt-4 text-[32px] font-bold leading-none tracking-normal text-life-text">
-            {value}
-          </p>
+    <article
+      className={`relative min-h-[148px] overflow-hidden rounded-[18px] border p-6 shadow-card ${classes.bg} ${classes.border}`}
+    >
+      <div className="relative z-10">
+        <div className={`flex items-center gap-3 text-[15px] font-bold ${classes.text}`}>
+          <Icon className="size-6" aria-hidden="true" strokeWidth={2.2} />
+          {label}
         </div>
-        <span
-          className={`flex size-11 items-center justify-center rounded-2xl text-sm font-bold ${classes.icon}`}
-        >
-          {getInitials(label)}
-        </span>
+        <p className="mt-8 text-[32px] font-bold leading-none text-[#101828]">
+          {value}
+        </p>
+        <p className="mt-4 flex items-center gap-2 text-[13px] font-semibold text-[#667085]">
+          <span className={`size-2.5 rounded-full ${classes.dot}`} />
+          {meta}
+        </p>
       </div>
-      <p className={`mt-4 text-[13px] font-semibold ${classes.text}`}>
-        {meta}
-      </p>
+      <SummaryVisual accent={accent} visual={visual} />
     </article>
   );
 }
 
-export interface DashboardSectionProps {
-  actionLabel: string;
-  children: React.ReactNode;
-  eyebrow: string;
-  title: string;
+function SummaryVisual({
+  accent,
+  visual,
+}: {
+  accent: Accent;
+  visual: SummaryCardProps["visual"];
+}) {
+  const classes = accentClasses[accent];
+
+  if (visual === "chart") {
+    return (
+      <div className="absolute bottom-8 right-6 flex h-16 w-36 items-end gap-2 opacity-90">
+        {[22, 36, 31, 48, 44, 58].map((height, index) => (
+          <span
+            className={`w-4 rounded-full ${classes.progress}`}
+            key={height + index}
+            style={{ height }}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  const VisualIcon =
+    visual === "document" ? FileText : visual === "bell" ? Bell : Sparkles;
+
+  return (
+    <VisualIcon
+      aria-hidden="true"
+      className={`absolute bottom-6 right-7 size-16 opacity-20 ${classes.text}`}
+      strokeWidth={1.8}
+    />
+  );
 }
 
 export function DashboardSection({
-  actionLabel,
   children,
-  eyebrow,
   title,
-}: DashboardSectionProps) {
+}: {
+  children: React.ReactNode;
+  title: string;
+}) {
   return (
-    <section className="rounded-[20px] border border-life-border bg-white p-5 shadow-soft sm:p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[13px] font-semibold text-life-muted">{eyebrow}</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-normal text-life-text">
-            {title}
-          </h2>
-        </div>
+    <section className="rounded-[22px] border border-[#ECEFEB] bg-white p-6 shadow-card">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold tracking-[-0.01em] text-[#101828]">
+          {title}
+        </h2>
         <button
-          className="rounded-xl border border-life-border bg-white px-4 py-2 text-sm font-semibold text-life-text transition hover:border-life-green/50 hover:text-life-green-dark"
+          className="rounded-xl border border-[#ECEFEB] bg-white px-4 py-2 text-sm font-semibold text-[#344054] shadow-button transition hover:border-[#D5EBDD] hover:text-[#2FA779]"
           type="button"
         >
-          {actionLabel}
+          View all
         </button>
       </div>
-      <div className="mt-5 grid gap-2">{children}</div>
+      <div className="mt-5 divide-y divide-[#F0F2EF]">{children}</div>
     </section>
   );
 }
 
-export interface ListItemProps {
+export function GoalItem({
+  accent,
+  icon: Icon,
+  progress,
+  title,
+}: {
   accent: Accent;
-  meta: string;
+  icon: LucideIcon;
+  progress: number;
   title: string;
-  value: string;
-}
-
-export function ListItem({ accent, meta, title, value }: ListItemProps) {
+}) {
   const classes = accentClasses[accent];
 
   return (
-    <div className="flex items-center gap-4 rounded-2xl px-1 py-3 transition hover:bg-life-bg/70 sm:px-2">
-      <span className={`size-2.5 shrink-0 rounded-full ${classes.dot}`} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-semibold text-life-text">
-          {title}
-        </p>
-        <p className="mt-1 text-[13px] font-medium text-life-muted">{meta}</p>
+    <div className="flex items-center gap-4 py-4 first:pt-1 last:pb-1">
+      <div className={`flex size-12 shrink-0 items-center justify-center rounded-full ${classes.icon}`}>
+        <Icon className="size-6" aria-hidden="true" />
       </div>
-      <p className="max-w-[46%] text-right text-[13px] font-semibold leading-5 text-life-muted sm:max-w-none">
-        {value}
-      </p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[15px] font-bold text-[#101828]">{title}</p>
+        <div className="mt-3 flex items-center gap-2">
+          <span className={`text-[13px] font-bold ${classes.text}`}>
+            {progress}%
+          </span>
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#EEF0EC]">
+            <div
+              className={`h-full rounded-full ${classes.progress}`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      </div>
+      <ChevronRight className="size-5 shrink-0 text-[#98A2B3]" aria-hidden="true" />
     </div>
   );
 }
 
-export interface InsightCardProps {
-  text: string;
+export function DocumentItem({
+  accent,
+  meta,
+  title,
+}: {
+  accent: Accent;
+  meta: string;
   title: string;
-  tone: Exclude<Accent, "blue" | "red">;
-}
-
-export function InsightCard({ text, title, tone }: InsightCardProps) {
-  const classes = accentClasses[tone];
+}) {
+  const classes = accentClasses[accent];
 
   return (
-    <article className={`rounded-[20px] border border-life-border p-5 ${classes.soft}`}>
-      <div className="flex items-center gap-3">
-        <span
-          className={`flex size-10 items-center justify-center rounded-2xl bg-white text-sm font-bold ${classes.text}`}
-        >
-          {getInitials(title)}
-        </span>
-        <h3 className="text-[17px] font-semibold text-life-text">{title}</h3>
+    <div className="flex items-center gap-4 py-4 first:pt-1 last:pb-1">
+      <div className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${classes.icon}`}>
+        <FileText className="size-6" aria-hidden="true" />
       </div>
-      <p className="mt-4 text-sm leading-6 text-life-muted">{text}</p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[15px] font-bold text-[#101828]">{title}</p>
+        <p className="mt-1 text-[13px] font-semibold text-[#667085]">{meta}</p>
+      </div>
+      <ChevronRight className="size-5 shrink-0 text-[#98A2B3]" aria-hidden="true" />
+    </div>
+  );
+}
+
+export function ReminderItem({
+  day,
+  meta,
+  month,
+  title,
+}: {
+  day: string;
+  meta: string;
+  month: string;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center gap-4 py-4 first:pt-1 last:pb-1">
+      <div className="w-[54px] shrink-0 overflow-hidden rounded-lg border border-[#F3D9D4] bg-white text-center">
+        <div className="bg-[#FF7B6D] py-1 text-[11px] font-bold text-white">
+          {month}
+        </div>
+        <div className="py-2 text-xl font-bold text-[#101828]">{day}</div>
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-[15px] font-bold text-[#101828]">{title}</p>
+        <p className="mt-1 text-[13px] font-semibold text-[#667085]">{meta}</p>
+      </div>
+    </div>
+  );
+}
+
+export function InsightStripCard({
+  accent,
+  icon: Icon,
+  text,
+  title,
+}: {
+  accent: Accent;
+  icon: LucideIcon;
+  text: string;
+  title: string;
+}) {
+  const classes = accentClasses[accent];
+
+  return (
+    <article className={`flex items-center gap-5 rounded-[18px] border p-5 ${classes.bg} ${classes.border}`}>
+      <div className={`flex size-14 shrink-0 items-center justify-center rounded-full ${classes.icon}`}>
+        <Icon className="size-7" aria-hidden="true" />
+      </div>
+      <div>
+        <h3 className={`text-[15px] font-bold ${classes.text}`}>{title}</h3>
+        <p className="mt-2 text-[14px] font-medium leading-6 text-[#667085]">
+          {text}
+        </p>
+      </div>
     </article>
   );
 }
 
 export function MobileBottomNav() {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-life-border bg-white/95 px-3 py-2 shadow-soft backdrop-blur md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-[#ECEFEB] bg-white px-3 pb-3 pt-2 shadow-[0_-10px_28px_rgba(16,24,40,0.08)] md:hidden">
       <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
-        {mobileNavItems.map((item) => {
-          const isActive = item === "Dashboard";
+        {mobileNavItems.map(({ icon: Icon, label }) => {
+          const isActive = label === "Dashboard";
 
           return (
             <a
-              className={`flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[11px] font-semibold ${
-                isActive
-                  ? "bg-life-green-soft text-life-green-dark"
-                  : "text-life-muted"
+              className={`flex flex-col items-center gap-1 rounded-2xl px-2 py-2 text-[10px] font-bold ${
+                isActive ? "text-[#2FA779]" : "text-[#667085]"
               }`}
-              href={item === "Dashboard" ? "/dashboard" : "#"}
-              key={item}
+              href={isActive ? "/dashboard" : "#"}
+              key={label}
             >
-              <span
-                className={`size-1.5 rounded-full ${
-                  isActive ? "bg-life-green" : "bg-life-border"
-                }`}
-              />
-              {item}
+              <Icon className="size-5" aria-hidden="true" />
+              {label}
             </a>
           );
         })}
