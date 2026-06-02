@@ -75,6 +75,19 @@ The web app includes mock auth pages at `/login` and `/register`, an `AuthServic
 
 No real users, tokens, passwords, or Cognito secrets are stored in this phase.
 
+## Phase 7: Local API Simulation
+
+The web app now includes local Next.js API routes that simulate the future API Gateway/Lambda boundary:
+
+- `GET /api/auth/session`
+- `GET/POST /api/contracts`
+- `GET/DELETE /api/contracts/{contractId}`
+- `GET/POST /api/documents`
+- `GET/DELETE /api/documents/{documentId}`
+- `GET /api/vault`
+
+Set `NEXT_PUBLIC_USE_MOCKS=false` and `NEXT_PUBLIC_API_BASE_URL=http://localhost:3000/api` to route supported clients through the local API simulation. This still uses mock data only and does not connect to AWS.
+
 ## Getting Started
 
 ```bash

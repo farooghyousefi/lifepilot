@@ -83,7 +83,10 @@ const securityCards = [
 ] as const;
 
 export default async function VaultPage() {
-  const client = createLifePilotClient({ useMockData: true });
+  const client = createLifePilotClient({
+    baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+    useMockData: process.env.NEXT_PUBLIC_USE_MOCKS !== "false",
+  });
   const vaultItems = (await client.listVaultItems()).data;
 
   return (

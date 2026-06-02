@@ -9,6 +9,8 @@ Life Pilot is split into product surfaces, shared code, serverless placeholders,
 
 Both clients currently use `@lifepilot/api-client` with mock data. The web dashboard accesses contracts through `apps/web/src/services/contracts` so the data source can switch from mocks to an API Gateway-backed client later.
 
+The web app also exposes local Next.js API routes under `/api` to simulate the future API Gateway/Lambda boundary before deployment.
+
 Current web product routes:
 
 - `/login`: public mock sign-in UI
@@ -24,6 +26,17 @@ Current web product routes:
 - `/settings`: settings placeholder
 
 These routes are frontend-only mock surfaces. They do not upload documents, call AI providers, connect to AWS, or store real user data.
+
+Local API simulation routes:
+
+- `/api/auth/session`: returns a demo auth session.
+- `/api/contracts`: lists and creates demo contracts.
+- `/api/contracts/{contractId}`: reads and deletes demo contracts.
+- `/api/documents`: lists and creates demo document metadata.
+- `/api/documents/{documentId}`: reads and deletes demo document metadata.
+- `/api/vault`: lists demo vault items.
+
+The local API derives a server-side demo `userId` and ignores any frontend-supplied user id. It accepts a mock bearer token when present, but does not require or create real tokens.
 
 Route boundaries are documented in `apps/web/src/navigation/routes.ts`:
 
@@ -46,6 +59,13 @@ Current dashboard scope:
 - Add-contract form backed by the same contract service
 
 `NEXT_PUBLIC_USE_MOCKS=true` keeps local mock data enabled. `NEXT_PUBLIC_USE_MOCKS=false` switches the service to API client requests against `NEXT_PUBLIC_API_BASE_URL`. There is still no AWS deployment or real user data in local development.
+
+For local API simulation use:
+
+```bash
+NEXT_PUBLIC_USE_MOCKS=false
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3000/api
+```
 
 ## Shared Packages
 

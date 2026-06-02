@@ -1,5 +1,6 @@
 import type {
   ApiResult,
+  AuthSession,
   Contract,
   ContractSummary,
   CreateContractInput,
@@ -8,6 +9,18 @@ import type {
   LifePilotSnapshot,
   VaultItem,
 } from "@lifepilot/shared";
+
+const mockAuthSession: AuthSession = {
+  accessToken: "mock-access-token",
+  provider: "mock",
+  user: {
+    email: "demo@lifepilot.local",
+    id: "demo-user-local-api",
+    name: "Life Pilot Demo",
+    provider: "mock",
+    role: "user",
+  },
+};
 
 const mockSnapshot: LifePilotSnapshot = {
   userDisplayName: "Demo Pilot",
@@ -321,6 +334,26 @@ export class LifePilotApiClient {
     return response.json() as Promise<ApiResult<LifePilotSnapshot>>;
   }
 
+  async getAuthSession(): Promise<ApiResult<AuthSession>> {
+    if (this.useMockData) {
+      return {
+        data: mockAuthSession,
+        requestId: "mock-auth-session",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(`${this.baseUrl}/auth/session`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<ApiResult<AuthSession>>;
+  }
+
   async listContracts(): Promise<ApiResult<Contract[]>> {
     if (this.useMockData) {
       return {
@@ -549,6 +582,11 @@ export const clearAuthToken = (): void => {
 export const getAuthHeaders = (): Record<string, string> =>
   defaultClient.getAuthHeaders();
 
+export const getAuthSession = (
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<AuthSession>> =>
+  createLifePilotClient(options).getAuthSession();
+
 export const listContracts = (
   options?: LifePilotClientOptions,
 ): Promise<ApiResult<Contract[]>> =>
@@ -600,4 +638,10 @@ export const listVaultItems = (
 ): Promise<ApiResult<VaultItem[]>> =>
   createLifePilotClient(options).listVaultItems();
 
-export { mockContracts, mockDocuments, mockSnapshot, mockVaultItems };
+export {
+  mockAuthSession,
+  mockContracts,
+  mockDocuments,
+  mockSnapshot,
+  mockVaultItems,
+};

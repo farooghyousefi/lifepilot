@@ -28,7 +28,10 @@ import {
   SummaryCard,
 } from "../dashboard/dashboard-ui";
 
-const documentClient = createLifePilotClient({ useMockData: true });
+const documentClient = createLifePilotClient({
+  baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+  useMockData: process.env.NEXT_PUBLIC_USE_MOCKS !== "false",
+});
 
 const categories: Array<{ label: string; value: DocumentCategory | "all" }> = [
   { label: "All", value: "all" },

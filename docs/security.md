@@ -12,6 +12,8 @@ Life Pilot is still in demo mode. Do not upload or enter real documents, real us
 - No document data is written to S3, DynamoDB, or external APIs.
 - No real user accounts, passwords, tokens, or Cognito secrets are stored.
 - No sensitive data should be logged.
+- Local `/api` routes use in-memory demo data only.
+- Local `/api` routes simulate server-side `userId`; frontend-supplied user ids must be ignored.
 
 ## Planned AWS Boundary
 

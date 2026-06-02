@@ -163,3 +163,12 @@ export interface ApiResult<T> {
   requestId: string;
   source: "mock" | "aws";
 }
+
+export interface ApiErrorResult {
+  error: {
+    code: string;
+    message: string;
+  };
+  requestId: string;
+  source: "mock" | "aws";
+}
