@@ -26,7 +26,7 @@ export class LifePilotFoundationStack extends Stack {
     super(scope, id, props);
 
     const userPool = new UserPool(this, "UserPool", {
-      selfSignUpEnabled: false,
+      selfSignUpEnabled: true,
       accountRecovery: AccountRecovery.EMAIL_ONLY,
       signInAliases: {
         email: true,

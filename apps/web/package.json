@@ -13,6 +13,7 @@
     "@lifepilot/api-client": "workspace:*",
     "@lifepilot/shared": "workspace:*",
     "@lifepilot/ui": "workspace:*",
+    "aws-amplify": "^6.17.0",
     "lucide-react": "^1.17.0",
     "next": "^15.1.3",
     "react": "^19.0.0",
