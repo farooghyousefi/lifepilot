@@ -8,6 +8,5 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["bin/**/*.ts", "lib/**/*.ts"]
+  "include": ["bin/**/*.ts", "functions/**/*.ts", "lib/**/*.ts"]
 }
-
