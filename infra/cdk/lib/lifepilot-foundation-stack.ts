@@ -10,6 +10,7 @@ import {
   CognitoUserPoolsAuthorizer,
   LambdaIntegration,
   RestApi,
+  ResponseType,
 } from "aws-cdk-lib/aws-apigateway";
 import {
   AccountRecovery,
@@ -126,9 +127,22 @@ export class LifePilotFoundationStack extends Stack {
     const api = new RestApi(this, "LifePilotApi", {
       restApiName: "Life Pilot API",
       deployOptions: {
-    stageName: "prod",
-    },
-    });
+        stageName: "prod",
+      },
+        defaultCorsPreflightOptions: {
+        allowOrigins: ["http://localhost:3000"],
+        allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+        allowHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Amz-Date",
+      "X-Api-Key",
+      "X-Amz-Security-Token",
+    ],
+  },
+  
+
+});
 
     const authorizer = new CognitoUserPoolsAuthorizer(this, "ApiAuthorizer", {
       cognitoUserPools: [userPool],
@@ -162,9 +176,19 @@ export class LifePilotFoundationStack extends Stack {
       new LambdaIntegration(contractsFunction),
       auth,
     );
-    api.root
-      .addResource("documents")
-      .addMethod("POST", new LambdaIntegration(documentsFunction), auth);
+    const documentsResource = api.root.addResource("documents");
+
+    documentsResource.addMethod(
+      "GET",
+      new LambdaIntegration(documentsFunction),
+      auth,
+    );
+
+    documentsResource.addMethod(
+      "POST",
+      new LambdaIntegration(documentsFunction),
+      auth,
+    );
     api.root
       .addResource("reminders")
       .addMethod("POST", new LambdaIntegration(remindersFunction), auth);
@@ -210,7 +234,12 @@ exports.handler = async function handler(event) {
 
   return {
     statusCode: 200,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      "Access-Control-Allow-Origin": "http://localhost:3000",
+      "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token",
+      "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+    },
     body: JSON.stringify({
       service: "lifepilot-${domain}",
       status: "placeholder",

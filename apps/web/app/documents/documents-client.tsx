@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { fetchAuthSession } from "aws-amplify/auth";
 import {
   AlertTriangle,
   CalendarClock,
@@ -130,7 +131,19 @@ const emptyForm: CreateDocumentInput = {
   notes: "",
   status: "protected",
 };
+async function attachCognitoToken() {
+  const session = await fetchAuthSession();
 
+  const token =
+    session.tokens?.idToken?.toString() ??
+    session.tokens?.accessToken?.toString();
+
+  if (!token) {
+    throw new Error("No Cognito token found. Please sign in again.");
+  }
+
+  documentClient.setAuthToken(token);
+}
 export function DocumentsClient() {
   const [documents, setDocuments] = useState<LifePilotDocument[]>([]);
   const [selectedDocument, setSelectedDocument] =
@@ -144,11 +157,31 @@ export function DocumentsClient() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    documentClient.listDocuments().then((result) => {
-      setDocuments(result.data);
-      setSelectedDocument(result.data[0] ?? null);
-    });
-  }, []);
+  let isMounted = true;
+
+  async function loadDocuments() {
+    await attachCognitoToken();
+
+    const result = await documentClient.listDocuments();
+
+    if (!isMounted) {
+      return;
+    }
+
+    const loadedDocuments = Array.isArray(result.data) ? result.data : [];
+
+    setDocuments(loadedDocuments);
+    setSelectedDocument(loadedDocuments[0] ?? null);
+  }
+
+  loadDocuments().catch((error) => {
+    console.error("Failed to load documents", error);
+  });
+
+  return () => {
+    isMounted = false;
+  };
+}, []);
 
   const filteredDocuments = useMemo(
     () =>
@@ -164,7 +197,7 @@ export function DocumentsClient() {
     if (!form.name.trim()) {
       return;
     }
-
+    await attachCognitoToken();
     const result = await documentClient.createDocument({
       ...form,
       name: form.name.trim(),
