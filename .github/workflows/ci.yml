@@ -40,6 +40,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build internal packages
+        run: pnpm -r --filter @lifepilot/api-client --filter @lifepilot/shared --filter @lifepilot/ui build
+
       - name: Web typecheck
         run: pnpm --filter @lifepilot/web typecheck
 
