@@ -1,8 +1,13 @@
-import { setAuthToken } from "@lifepilot/api-client";
+import { clearAuthToken, setAuthToken } from "@lifepilot/api-client";
 import { Amplify } from "aws-amplify";
 import {
+  confirmResetPassword,
+  confirmSignUp,
   fetchAuthSession,
+  fetchUserAttributes,
   getCurrentUser,
+  resendSignUpCode,
+  resetPassword,
   signIn,
   signOut,
   signUp,
@@ -12,8 +17,14 @@ import type { AuthSession, User } from "@lifepilot/shared";
 
 import type {
   AuthService,
+  ConfirmForgotPasswordInput,
+  ConfirmSignUpInput,
+  ForgotPasswordInput,
   RegisterInput,
+  ResendConfirmationCodeInput,
   SignInInput,
+  SignUpInput,
+  SignUpResult,
 } from "./auth-service";
 
 let amplifyConfigured = false;
@@ -42,14 +53,35 @@ function configureAmplify() {
   amplifyConfigured = true;
 }
 
-function createUserFromEmail(email: string, id: string): User {
+function createUserFromEmail(email: string, id: string, name?: string): User {
   return {
     email,
     id,
-    name: email.split("@")[0] || "Life Pilot User",
+    name: name || email.split("@")[0] || "Life Pilot User",
     provider: "cognito",
     role: "user",
   };
+}
+
+function getDeliveryDestination(nextStep: unknown): string | undefined {
+  if (
+    typeof nextStep === "object" &&
+    nextStep !== null &&
+    "codeDeliveryDetails" in nextStep
+  ) {
+    const details = nextStep.codeDeliveryDetails;
+
+    if (
+      typeof details === "object" &&
+      details !== null &&
+      "destination" in details &&
+      typeof details.destination === "string"
+    ) {
+      return details.destination;
+    }
+  }
+
+  return undefined;
 }
 
 export class CognitoAuthService implements AuthService {
@@ -58,6 +90,12 @@ export class CognitoAuthService implements AuthService {
   }
 
   async signIn(input: SignInInput): Promise<AuthSession> {
+    const existingSession = await this.getCurrentSession();
+
+    if (existingSession) {
+      return existingSession;
+    }
+
     const result = await signIn({
       username: input.email,
       password: input.password,
@@ -67,62 +105,112 @@ export class CognitoAuthService implements AuthService {
       throw new Error("Sign in requires another step.");
     }
 
-    const session = await fetchAuthSession();
-    const currentUser = await getCurrentUser();
+    const session = await this.getCurrentSession();
 
-    const accessToken = session.tokens?.accessToken?.toString() ?? "";
+    if (!session) {
+      throw new Error("Anmeldung konnte nicht abgeschlossen werden.");
+    }
 
-    setAuthToken(accessToken);
-
-    return {
-      accessToken,
-      provider: "cognito",
-      user: createUserFromEmail(input.email, currentUser.userId),
-    };
+    return session;
   }
 
-  async register(input: RegisterInput): Promise<AuthSession> {
-    await signUp({
+  async signUp(input: SignUpInput): Promise<SignUpResult> {
+    const result = await signUp({
       username: input.email,
       password: input.password,
       options: {
         userAttributes: {
           email: input.email,
-          name: input.name,
+          ...(input.name ? { name: input.name } : {}),
         },
       },
     });
 
     return {
-      accessToken: "",
-      provider: "cognito",
-      user: {
-        email: input.email,
-        id: input.email,
-        name: input.name,
-        provider: "cognito",
-        role: "user",
-      },
+      deliveryDestination: getDeliveryDestination(result.nextStep),
+      email: input.email,
+      isComplete: result.nextStep.signUpStep === "DONE",
+      needsConfirmation: result.nextStep.signUpStep === "CONFIRM_SIGN_UP",
     };
+  }
+
+  async register(input: RegisterInput): Promise<SignUpResult> {
+    return this.signUp(input);
+  }
+
+  async confirmSignUp(input: ConfirmSignUpInput): Promise<SignUpResult> {
+    const result = await confirmSignUp({
+      username: input.email,
+      confirmationCode: input.code,
+    });
+
+    return {
+      deliveryDestination: getDeliveryDestination(result.nextStep),
+      email: input.email,
+      isComplete: result.nextStep.signUpStep === "DONE",
+      needsConfirmation: result.nextStep.signUpStep === "CONFIRM_SIGN_UP",
+    };
+  }
+
+  async resendConfirmationCode(
+    input: ResendConfirmationCodeInput,
+  ): Promise<void> {
+    await resendSignUpCode({ username: input.email });
+  }
+
+  async forgotPassword(input: ForgotPasswordInput): Promise<void> {
+    await resetPassword({ username: input.email });
+  }
+
+  async confirmForgotPassword(
+    input: ConfirmForgotPasswordInput,
+  ): Promise<void> {
+    await confirmResetPassword({
+      username: input.email,
+      confirmationCode: input.code,
+      newPassword: input.newPassword,
+    });
   }
 
   async signOut(): Promise<void> {
     await signOut();
-    setAuthToken("");
+    clearAuthToken();
   }
 
-  async getCurrentUser(): Promise<User | null> {
+  async getCurrentSession(): Promise<AuthSession | null> {
     try {
       const currentUser = await getCurrentUser();
       const session = await fetchAuthSession();
+      const attributes = await fetchUserAttributes().catch(
+        () => ({}) as Record<string, string>,
+      );
       const accessToken = session.tokens?.accessToken?.toString() ?? "";
+      const email =
+        attributes.email ??
+        currentUser.signInDetails?.loginId ??
+        currentUser.username;
 
       setAuthToken(accessToken);
 
-      return createUserFromEmail(currentUser.username, currentUser.userId);
+      return {
+        accessToken,
+        expiresAt: session.tokens?.accessToken?.payload.exp
+          ? new Date(
+              Number(session.tokens.accessToken.payload.exp) * 1000,
+            ).toISOString()
+          : undefined,
+        provider: "cognito",
+        user: createUserFromEmail(email, currentUser.userId, attributes.name),
+      };
     } catch {
+      clearAuthToken();
       return null;
     }
+  }
+
+  async getCurrentUser(): Promise<User | null> {
+    const session = await this.getCurrentSession();
+    return session?.user ?? null;
   }
 
   async isAuthenticated(): Promise<boolean> {

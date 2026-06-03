@@ -15,6 +15,16 @@ export const createAuthService = (): AuthService => {
 
 export const authService = createAuthService();
 
-export type { AuthService, RegisterInput, SignInInput } from "./auth-service";
+export type {
+  AuthService,
+  ConfirmForgotPasswordInput,
+  ConfirmSignUpInput,
+  ForgotPasswordInput,
+  RegisterInput,
+  ResendConfirmationCodeInput,
+  SignInInput,
+  SignUpInput,
+  SignUpResult,
+} from "./auth-service";
 export { CognitoAuthService } from "./cognito-auth-service";
 export { MockAuthService } from "./mock-auth-service";

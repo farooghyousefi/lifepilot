@@ -2,8 +2,14 @@ import type { AuthSession, User } from "@lifepilot/shared";
 import { setAuthToken, clearAuthToken } from "@lifepilot/api-client";
 import type {
   AuthService,
+  ConfirmForgotPasswordInput,
+  ConfirmSignUpInput,
+  ForgotPasswordInput,
   RegisterInput,
+  ResendConfirmationCodeInput,
   SignInInput,
+  SignUpInput,
+  SignUpResult,
 } from "./auth-service";
 
 const demoUser: User = {
@@ -38,21 +44,56 @@ export class MockAuthService implements AuthService {
     return session;
   }
 
-  async register(input: RegisterInput): Promise<AuthSession> {
+  async signUp(input: SignUpInput): Promise<SignUpResult> {
     const session: AuthSession = {
       accessToken: "mock-access-token",
       provider: "mock",
       user: {
         ...demoUser,
         email: input.email,
-        name: input.name,
+        name: input.name ?? input.email.split("@")[0] ?? demoUser.name,
       },
     };
 
     this.currentSession = session;
     setAuthToken(session.accessToken ?? "");
 
-    return session;
+    return {
+      email: input.email,
+      isComplete: true,
+      needsConfirmation: false,
+    };
+  }
+
+  async register(input: RegisterInput): Promise<SignUpResult> {
+    return this.signUp(input);
+  }
+
+  async confirmSignUp(input: ConfirmSignUpInput): Promise<SignUpResult> {
+    return {
+      email: input.email,
+      isComplete: true,
+      needsConfirmation: false,
+    };
+  }
+
+  async resendConfirmationCode(
+    input: ResendConfirmationCodeInput,
+  ): Promise<void> {
+    void input;
+    return undefined;
+  }
+
+  async forgotPassword(input: ForgotPasswordInput): Promise<void> {
+    void input;
+    return undefined;
+  }
+
+  async confirmForgotPassword(
+    input: ConfirmForgotPasswordInput,
+  ): Promise<void> {
+    void input;
+    return undefined;
   }
 
   async signOut(): Promise<void> {
@@ -62,6 +103,10 @@ export class MockAuthService implements AuthService {
 
   async getCurrentUser(): Promise<User | null> {
     return this.currentSession?.user ?? null;
+  }
+
+  async getCurrentSession(): Promise<AuthSession | null> {
+    return this.currentSession;
   }
 
   async isAuthenticated(): Promise<boolean> {

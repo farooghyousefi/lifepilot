@@ -7,7 +7,7 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
-import { createLifePilotClient } from "@lifepilot/api-client";
+import { getMockVaultItems } from "@lifepilot/api-client";
 import type { DocumentCategory, VaultItem } from "@lifepilot/shared";
 
 import {
@@ -82,12 +82,8 @@ const securityCards = [
   },
 ] as const;
 
-export default async function VaultPage() {
-  const client = createLifePilotClient({
-    baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
-    useMockData: process.env.NEXT_PUBLIC_USE_MOCKS !== "false",
-  });
-  const vaultItems = (await client.listVaultItems()).data;
+export default function VaultPage() {
+  const vaultItems = getMockVaultItems();
 
   return (
     <LifePilotShell activeItem="Vault">

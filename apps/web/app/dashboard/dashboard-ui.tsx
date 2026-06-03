@@ -14,6 +14,7 @@ import {
   Sun,
   type LucideIcon,
 } from "lucide-react";
+import { AuthGuard } from "../../src/components/auth/auth-guard";
 import { UserMenu } from "./user-menu";
 
 export type Accent = "blue" | "green" | "orange" | "purple" | "red";
@@ -147,7 +148,7 @@ export function Sidebar({ activeItem = "Dashboard" }: NavigationProps) {
                 Privacy First
               </p>
               <p className="mt-2 text-[13px] leading-6 text-[#667085]">
-                Your data is encrypted end-to-end and stays under your control.
+                Your workspace is scoped to your signed-in account.
               </p>
             </div>
           </div>
@@ -166,9 +167,11 @@ export function LifePilotShell({
       <div className="mx-auto grid min-h-screen w-full max-w-[1640px] bg-white md:grid-cols-[300px_1fr]">
         <Sidebar activeItem={activeItem} />
         <div className="min-w-0 bg-[#FCFBFA] pb-24 md:pb-0">
-          <main className="mx-auto max-w-[1240px] px-5 py-5 sm:px-8 md:px-10 md:py-9 xl:px-12">
-            {children}
-          </main>
+          <AuthGuard>
+            <main className="mx-auto max-w-[1240px] px-5 py-5 sm:px-8 md:px-10 md:py-9 xl:px-12">
+              {children}
+            </main>
+          </AuthGuard>
         </div>
       </div>
       <MobileBottomNav activeItem={activeItem} />
@@ -276,7 +279,7 @@ export function PageHeader({
         </div>
         <span className="hidden items-center gap-2 rounded-full border border-[#E7EAE5] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#475467] shadow-button md:inline-flex">
           <span className="size-2.5 rounded-full bg-[#12B981]" />
-          Local mock mode
+          Cognito secured
         </span>
       </div>
     </header>

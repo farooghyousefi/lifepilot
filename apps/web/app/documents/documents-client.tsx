@@ -191,7 +191,7 @@ export function DocumentsClient() {
     [activeCategory, documents],
   );
 
-  const saveDemoDocument = async (event: React.FormEvent<HTMLFormElement>) => {
+  const saveDocument = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!form.name.trim()) {
@@ -208,7 +208,9 @@ export function DocumentsClient() {
     setSelectedDocument(result.data);
     setForm(emptyForm);
     setIsUploadOpen(false);
-    setSuccessMessage("Document added in demo mode. No real data was stored.");
+    setSuccessMessage(
+      "Document metadata saved. No real file was uploaded.",
+    );
   };
 
   const selectDocument = (document: LifePilotDocument) => {
@@ -253,7 +255,7 @@ export function DocumentsClient() {
                 Document library
               </h2>
               <p className="mt-1 text-[13px] font-semibold text-[#667085]">
-                Demo records only. No real files are uploaded or stored.
+                Metadata is stored for your signed-in account. No real files are uploaded yet.
               </p>
             </div>
             <button
@@ -309,7 +311,7 @@ export function DocumentsClient() {
           form={form}
           onChange={setForm}
           onClose={() => setIsUploadOpen(false)}
-          onSubmit={saveDemoDocument}
+          onSubmit={saveDocument}
         />
       ) : null}
 
@@ -401,7 +403,7 @@ function DocumentDetailPanel({
           Select a document
         </p>
         <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
-          Document details will appear here in demo mode.
+          Select a document to review its metadata and next action.
         </p>
       </aside>
     );
@@ -513,7 +515,7 @@ function UploadDialog({
               Upload document
             </h2>
             <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
-              Demo mode: no real file will be uploaded.
+              No file upload yet: only document metadata will be saved.
             </p>
           </div>
           <button

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChevronDown, LogOut } from "lucide-react";
 import type { User } from "@lifepilot/shared";
@@ -8,6 +9,7 @@ import type { User } from "@lifepilot/shared";
 import { authService } from "../../src/services/auth";
 
 export function UserMenu() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [isSignedOut, setIsSignedOut] = useState(false);
 
@@ -19,10 +21,11 @@ export function UserMenu() {
     await authService.signOut();
     setUser(null);
     setIsSignedOut(true);
+    router.push("/login");
   };
 
   const initials =
-    user?.name
+    (user?.name || user?.email || "Life Pilot")
       .split(" ")
       .map((part) => part[0])
       .join("")
@@ -36,14 +39,14 @@ export function UserMenu() {
       </div>
       <div className="hidden min-w-0 lg:block">
         <p className="max-w-32 truncate text-[13px] font-bold text-[#101828]">
-          {user?.name ?? "Demo user"}
+          {user?.name ?? "LifePilot Nutzer"}
         </p>
         <p className="max-w-32 truncate text-[12px] font-semibold text-[#667085]">
-          {isSignedOut ? "Signed out" : "Mock auth"}
+          {isSignedOut ? "Abgemeldet" : user?.email ?? "Angemeldet"}
         </p>
       </div>
       <button
-        aria-label="Sign out"
+        aria-label="Abmelden"
         className="flex size-9 items-center justify-center rounded-xl text-[#667085] transition hover:bg-[#F7F8F5] hover:text-[#101828]"
         onClick={signOut}
         type="button"
@@ -55,7 +58,7 @@ export function UserMenu() {
           className="rounded-xl bg-[#EAF7F0] px-3 py-2 text-[12px] font-bold text-[#2FA779]"
           href="/login"
         >
-          Sign in
+          Anmelden
         </Link>
       ) : (
         <ChevronDown className="size-5 text-[#101828]" aria-hidden="true" />
