@@ -83,10 +83,7 @@ export class LifePilotFoundationStack extends Stack {
       "contracts",
       {
         AUTH_PROVIDER: "cognito",
-        CONTRACTS_TABLE_NAME: contractsTable.tableName,
-        GOALS_TABLE_NAME: goalsTable.tableName,
-        DOCUMENTS_TABLE_NAME: documentsTable.tableName,
-        DOCUMENTS_BUCKET_NAME: documentsBucket.bucketName,
+    CONTRACTS_TABLE_NAME: contractsTable.tableName,
       },
     );
 
@@ -119,19 +116,18 @@ export class LifePilotFoundationStack extends Stack {
       },
     );
 
-    goalsTable.grantReadWriteData(contractsFunction);
-    contractsTable.grantReadWriteData(contractsFunction);
-    documentsTable.grantReadWriteData(contractsFunction);
-    documentsTable.grantReadWriteData(documentsFunction);
-    remindersTable.grantReadWriteData(remindersFunction);
-    goalsTable.grantReadData(aiAnalysisFunction);
-    documentsTable.grantReadData(aiAnalysisFunction);
-    documentsBucket.grantReadWrite(documentsFunction);
-    documentsBucket.grantRead(contractsFunction);
+      contractsTable.grantReadWriteData(contractsFunction);
+      documentsTable.grantReadWriteData(documentsFunction);
+      documentsBucket.grantReadWrite(documentsFunction);
+      remindersTable.grantReadWriteData(remindersFunction);
+      goalsTable.grantReadData(aiAnalysisFunction);
+      documentsTable.grantReadData(aiAnalysisFunction);
 
     const api = new RestApi(this, "LifePilotApi", {
       restApiName: "Life Pilot API",
-      deploy: false,
+      deployOptions: {
+    stageName: "prod",
+    },
     });
 
     const authorizer = new CognitoUserPoolsAuthorizer(this, "ApiAuthorizer", {
