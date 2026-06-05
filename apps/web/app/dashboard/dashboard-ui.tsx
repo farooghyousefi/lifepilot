@@ -22,30 +22,32 @@ export type Accent = "blue" | "green" | "orange" | "purple" | "red";
 const sidebarItems: Array<{
   href: string;
   icon: LucideIcon;
+  key: string;
   label: string;
 }> = [
-  { href: "/dashboard", icon: Home, label: "Dashboard" },
-  { href: "/contracts", icon: CreditCard, label: "Contracts" },
-  { href: "/goals", icon: Sparkles, label: "Goals" },
-  { href: "/documents", icon: FileText, label: "Documents" },
-  { href: "/reminders", icon: Bell, label: "Reminders" },
-  { href: "/insights", icon: BarChart3, label: "Insights" },
-  { href: "/ai-assistant", icon: Bot, label: "AI Assistant" },
-  { href: "/vault", icon: LockKeyhole, label: "Vault" },
-  { href: "/settings", icon: Settings, label: "Settings" },
+  { href: "/dashboard", icon: Home, key: "Dashboard", label: "Übersicht" },
+  { href: "/contracts", icon: CreditCard, key: "Contracts", label: "Verträge" },
+  { href: "/goals", icon: Sparkles, key: "Goals", label: "Aufgaben" },
+  { href: "/documents", icon: FileText, key: "Documents", label: "Dokumente" },
+  { href: "/reminders", icon: Bell, key: "Reminders", label: "Erinnerungen" },
+  { href: "/insights", icon: BarChart3, key: "Insights", label: "Hinweise" },
+  { href: "/ai-assistant", icon: Bot, key: "AI Assistant", label: "Assistent" },
+  { href: "/vault", icon: LockKeyhole, key: "Vault", label: "Tresor" },
+  { href: "/settings", icon: Settings, key: "Settings", label: "Einstellungen" },
 ];
 
 const mobileNavItems: Array<{
   href: string;
   icon: LucideIcon;
+  key: string;
   label: string;
 }> = [
-  { href: "/dashboard", icon: Home, label: "Dashboard" },
-  { href: "/contracts", icon: CreditCard, label: "Contracts" },
-  { href: "/documents", icon: FileText, label: "Documents" },
-  { href: "/reminders", icon: Bell, label: "Reminders" },
-  { href: "/insights", icon: Sparkles, label: "Insights" },
-  { href: "/vault", icon: LockKeyhole, label: "Vault" },
+  { href: "/dashboard", icon: Home, key: "Dashboard", label: "Übersicht" },
+  { href: "/contracts", icon: CreditCard, key: "Contracts", label: "Verträge" },
+  { href: "/documents", icon: FileText, key: "Documents", label: "Dokumente" },
+  { href: "/reminders", icon: Bell, key: "Reminders", label: "Fristen" },
+  { href: "/insights", icon: Sparkles, key: "Insights", label: "Hinweise" },
+  { href: "/vault", icon: LockKeyhole, key: "Vault", label: "Tresor" },
 ];
 
 const accentClasses: Record<
@@ -114,8 +116,8 @@ export function Sidebar({ activeItem = "Dashboard" }: NavigationProps) {
         </a>
 
         <nav className="mt-10 grid gap-2">
-          {sidebarItems.map(({ href, icon: Icon, label }) => {
-            const isActive = label === activeItem;
+          {sidebarItems.map(({ href, icon: Icon, key, label }) => {
+            const isActive = key === activeItem;
 
             return (
               <a
@@ -145,10 +147,10 @@ export function Sidebar({ activeItem = "Dashboard" }: NavigationProps) {
             </div>
             <div>
               <p className="text-[15px] font-bold text-[#101828]">
-                Privacy First
+                Datenschutz zuerst
               </p>
               <p className="mt-2 text-[13px] leading-6 text-[#667085]">
-                Your workspace is scoped to your signed-in account.
+                Dein Bereich ist an dein angemeldetes Konto gebunden.
               </p>
             </div>
           </div>
@@ -209,10 +211,10 @@ export function DashboardHeader() {
           />
           <div>
             <h1 className="text-[26px] font-bold leading-tight tracking-[-0.01em] text-[#101828] md:text-[32px]">
-              Good morning
+              LifePilot Command Center
             </h1>
             <p className="mt-1 text-[13px] font-medium text-[#667085] md:text-[15px]">
-              Here’s your overview for today.
+              Dokumente, Fristen und nächste Schritte im Blick.
             </p>
           </div>
         </div>
@@ -220,7 +222,7 @@ export function DashboardHeader() {
         <div className="hidden items-center gap-5 md:flex">
           <span className="inline-flex items-center gap-2 rounded-full border border-[#E7EAE5] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#475467] shadow-button">
             <span className="size-2.5 rounded-full bg-[#12B981]" />
-            All systems operational
+            Systeme bereit
           </span>
           <button
             aria-label="Notifications"
@@ -279,7 +281,7 @@ export function PageHeader({
         </div>
         <span className="hidden items-center gap-2 rounded-full border border-[#E7EAE5] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#475467] shadow-button md:inline-flex">
           <span className="size-2.5 rounded-full bg-[#12B981]" />
-          Cognito secured
+          Cognito geschützt
         </span>
       </div>
     </header>
@@ -400,7 +402,7 @@ export function DashboardSection({
           className="rounded-xl border border-[#ECEFEB] bg-white px-4 py-2 text-sm font-semibold text-[#344054] shadow-button transition hover:border-[#D5EBDD] hover:text-[#2FA779]"
           type="button"
         >
-          View all
+          Alle ansehen
         </button>
       </div>
       <div className="mt-5 divide-y divide-[#F0F2EF]">{children}</div>
@@ -529,8 +531,8 @@ export function MobileBottomNav({ activeItem = "Dashboard" }: NavigationProps) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-[#ECEFEB] bg-white px-3 pb-3 pt-2 shadow-[0_-10px_28px_rgba(16,24,40,0.08)] md:hidden">
       <div className="mx-auto grid max-w-lg grid-cols-6 gap-1">
-        {mobileNavItems.map(({ href, icon: Icon, label }) => {
-          const isActive = label === activeItem;
+        {mobileNavItems.map(({ href, icon: Icon, key, label }) => {
+          const isActive = key === activeItem;
 
           return (
             <a
