@@ -16,12 +16,17 @@ import {
   Upload,
   type LucideIcon,
 } from "lucide-react";
-import type { DocumentAnalysis, Reminder } from "@lifepilot/shared";
+import type {
+  ContractRecord,
+  DocumentAnalysis,
+  ReminderRecord,
+} from "@lifepilot/shared";
 
+import { readStoredDocumentAnalyses } from "../../src/services/documents";
 import {
-  readStoredDocumentAnalyses,
-} from "../../src/services/documents";
-import { readStoredReminders } from "../../src/services/reminders";
+  listPersistedContracts,
+  listPersistedReminders,
+} from "../../src/services/memory";
 import {
   LifePilotShell,
   PageHeader,
@@ -29,9 +34,6 @@ import {
   type Accent,
 } from "./dashboard-ui";
 import { DocumentIntelligenceSummary } from "./document-intelligence-summary";
-
-const localDevMessage =
-  "Lokaler Dev-Modus: Analyse und Erinnerungen werden aktuell im Browser gespeichert.";
 
 const quickActions: Array<{
   description: string;
@@ -98,28 +100,44 @@ const lifePilotLoop = [
 
 export function DashboardClient() {
   const [analyses, setAnalyses] = useState<DocumentAnalysis[]>([]);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [contracts, setContracts] = useState<ContractRecord[]>([]);
+  const [reminders, setReminders] = useState<ReminderRecord[]>([]);
+  const [persistenceMessage, setPersistenceMessage] = useState(
+    "Backend-Speicherung vorbereitet, aber noch nicht deployed.",
+  );
 
   useEffect(() => {
     setAnalyses(readStoredDocumentAnalyses());
-    setReminders(readStoredReminders());
+
+    async function loadMemory() {
+      const [contractResult, reminderResult] = await Promise.all([
+        listPersistedContracts(),
+        listPersistedReminders(),
+      ]);
+
+      setContracts(contractResult.data);
+      setReminders(reminderResult.data);
+      setPersistenceMessage(
+        contractResult.status === "backend-saved" ||
+          reminderResult.status === "backend-saved"
+          ? "Backend-Speicherung aktiv."
+          : contractResult.message,
+      );
+    }
+
+    void loadMemory();
   }, []);
 
   const openReminders = useMemo(
-    () => reminders.filter((reminder) => !reminder.completed),
+    () => reminders.filter((reminder) => reminder.status !== "done"),
     [reminders],
   );
-
-  const detectedDeadlines = useMemo(
+  const overdueReminders = useMemo(
     () =>
-      analyses.flatMap((analysis) =>
-        analysis.detectedDeadlines.map((deadline) => ({
-          ...deadline,
-          documentId: analysis.documentId,
-          documentName: analysis.documentName ?? "Unbenanntes Dokument",
-        })),
+      openReminders.filter(
+        (reminder) => startOfDay(new Date(reminder.dueDate)) < startOfDay(new Date()),
       ),
-    [analyses],
+    [openReminders],
   );
 
   const documentsForReview = useMemo(
@@ -131,6 +149,25 @@ export function DashboardClient() {
           analysis.detectedDeadlines.length > 0,
       ),
     [analyses],
+  );
+  const missingFacts = useMemo(
+    () =>
+      contracts.flatMap((contract) =>
+        contract.missingFacts.map((missingFact) => ({
+          contract,
+          missingFact,
+        })),
+      ),
+    [contracts],
+  );
+  const cancellationSoonContracts = useMemo(
+    () =>
+      contracts.filter(
+        (contract) =>
+          contract.lifecycleStatus === "cancellable-now" ||
+          contract.lifecycleStatus === "cancellation-window-upcoming",
+      ),
+    [contracts],
   );
 
   const summaryCards = [
@@ -148,25 +185,25 @@ export function DashboardClient() {
     {
       accent: "green",
       icon: CheckCircle2,
-      label: "Bestätigt",
-      meta: "Aus Dokumenten erstellt",
-      value: String(openReminders.length),
+      label: "Verträge",
+      meta: "Unter Beobachtung",
+      value: String(contracts.length),
       visual: "chart",
     },
     {
       accent: "blue",
       icon: FileText,
-      label: "Dokumente",
-      meta: "Lokal analysiert",
-      value: String(analyses.length),
+      label: "Fehlende Angaben",
+      meta: "Nur Pflichtfelder",
+      value: String(missingFacts.length),
       visual: "document",
     },
     {
       accent: "purple",
       icon: FileSearch,
-      label: "Mögliche Fristen",
-      meta: "Noch zu prüfen",
-      value: String(detectedDeadlines.length),
+      label: "Kündigung bald",
+      meta: "Fenster/Entwurf",
+      value: String(cancellationSoonContracts.length),
       visual: "sparkles",
     },
   ] satisfies Array<{
@@ -193,12 +230,12 @@ export function DashboardClient() {
           </div>
           <div>
             <p className="text-[15px] font-bold text-[#101828]">
-              {localDevMessage}
+              {persistenceMessage}
             </p>
             <p className="mt-1 text-[13px] font-semibold leading-6 text-[#667085]">
               Das ist bewusst ehrlich: produktive Speicherung,
               geräteübergreifende Synchronisierung und sichere Reminder im
-              Backend brauchen noch AWS Deployment.
+              Backend brauchen ein AWS Deployment und Live-Validierung.
             </p>
           </div>
         </div>
@@ -243,6 +280,69 @@ export function DashboardClient() {
 
       <DocumentIntelligenceSummary />
 
+      {contracts.length === 0 && reminders.length === 0 ? (
+        <section className="mt-7 rounded-[22px] border border-[#ECEFEB] bg-white p-6 shadow-card">
+          <p className="text-[16px] font-bold text-[#101828]">
+            Noch keine gespeicherten Verträge oder Erinnerungen. Lade ein
+            Dokument hoch oder erstelle eine Erinnerung manuell.
+          </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <Link
+              className="inline-flex justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white"
+              href="/documents"
+            >
+              Dokument hochladen
+            </Link>
+            <Link
+              className="inline-flex justify-center rounded-xl border border-[#ECEFEB] bg-white px-4 py-3 text-[13px] font-bold text-[#344054]"
+              href="/reminders"
+            >
+              Erinnerung erstellen
+            </Link>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="mt-7 grid gap-5 xl:grid-cols-2">
+        <CommandPanel
+          icon={Bell}
+          title="Nächste Fristen & Erinnerungen"
+          tone="orange"
+        >
+          {openReminders.length > 0 ? (
+            openReminders.slice(0, 3).map((reminder) => (
+              <StatusRow
+                key={reminder.id}
+                meta={formatReminderMeta(reminder)}
+                title={reminder.title}
+              />
+            ))
+          ) : (
+            <EmptyState text="Noch keine offenen Erinnerungen." />
+          )}
+          <Link
+            className="mt-4 inline-flex items-center justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866]"
+            href="/reminders"
+          >
+            Erinnerungen öffnen
+          </Link>
+        </CommandPanel>
+
+        <CommandPanel icon={AlertTriangle} title="Überfällig" tone="orange">
+          {overdueReminders.length > 0 ? (
+            overdueReminders.slice(0, 3).map((reminder) => (
+              <StatusRow
+                key={reminder.id}
+                meta={formatReminderMeta(reminder)}
+                title={reminder.title}
+              />
+            ))
+          ) : (
+            <EmptyState text="Keine überfälligen Erinnerungen." />
+          )}
+        </CommandPanel>
+      </section>
+
       <section className="mt-7 grid gap-5 xl:grid-cols-[1fr_0.9fr]">
         <CommandPanel
           icon={ClipboardCheck}
@@ -267,20 +367,57 @@ export function DashboardClient() {
           title="Verträge und Kündigungen"
           tone="green"
         >
-          <StatusRow
-            meta="Vertrags-Cockpit ist vorbereitet und bleibt der nächste Produktbereich."
-            title="Kündigungen aus Dokumenten vorbereiten"
-          />
-          <StatusRow
-            meta="Später: Vertrag erkennen, Frist bestätigen, Kündigung vorbereiten."
-            title="Noch keine echte Vertragsanalyse aktiv"
-          />
+          {contracts.length > 0 ? (
+            contracts.slice(0, 4).map((contract) => (
+              <StatusRow
+                key={contract.id}
+                meta={formatContractMeta(contract)}
+                title={contract.provider ?? contract.name}
+              />
+            ))
+          ) : (
+            <EmptyState text="Noch kein Vertrag gespeichert. Prüfe ein Dokument und speichere es als Vertrag." />
+          )}
           <Link
             className="mt-4 inline-flex items-center justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866]"
             href="/contracts"
           >
             Verträge öffnen
           </Link>
+        </CommandPanel>
+      </section>
+
+      <section className="mt-7 grid gap-5 xl:grid-cols-2">
+        <CommandPanel
+          icon={AlertTriangle}
+          title="Fehlende Angaben"
+          tone="orange"
+        >
+          {missingFacts.length > 0 ? (
+            missingFacts.slice(0, 4).map(({ contract, missingFact }) => (
+              <StatusRow
+                key={`${contract.id}-${missingFact.key}`}
+                meta={missingFact.reason}
+                title={`${contract.provider ?? contract.name}: ${missingFact.label}`}
+              />
+            ))
+          ) : (
+            <EmptyState text="Keine kritischen Pflichtangaben offen." />
+          )}
+        </CommandPanel>
+
+        <CommandPanel icon={FileSearch} title="Agent-Vorschläge" tone="green">
+          {buildAgentSuggestions(contracts).length > 0 ? (
+            buildAgentSuggestions(contracts).map((suggestion) => (
+              <StatusRow
+                key={suggestion}
+                meta="Nur Vorschlag. LifePilot führt nichts automatisch aus."
+                title={suggestion}
+              />
+            ))
+          ) : (
+            <EmptyState text="Sobald Verträge gespeichert sind, schlägt LifePilot nächste Schritte vor." />
+          )}
         </CommandPanel>
       </section>
 
@@ -408,6 +545,16 @@ function StatusRow({ meta, title }: { meta: string; title: string }) {
   );
 }
 
+function formatReminderMeta(reminder: ReminderRecord): string {
+  const dueDate = new Date(reminder.dueDate).toLocaleDateString("de-DE");
+
+  return reminder.reminderDate
+    ? `Fällig am ${dueDate}. Erinnerung am ${new Date(
+        reminder.reminderDate,
+      ).toLocaleDateString("de-DE")}.`
+    : `Fällig am ${dueDate}.`;
+}
+
 function EmptyState({ text }: { text: string }) {
   return (
     <div className="py-4 first:pt-1 last:pb-1">
@@ -416,6 +563,44 @@ function EmptyState({ text }: { text: string }) {
       </p>
     </div>
   );
+}
+
+function formatContractMeta(contract: ContractRecord): string {
+  if (contract.missingFacts.length > 0) {
+    return `${contract.missingFacts.length} Pflichtangabe(n) fehlen.`;
+  }
+
+  if (contract.brain.nextImportantDate) {
+    return `Nächste wichtige Frist: ${new Date(
+      contract.brain.nextImportantDate,
+    ).toLocaleDateString("de-DE")}.`;
+  }
+
+  return "Vertrag vollständig erfasst, aber ohne nächste Frist.";
+}
+
+function buildAgentSuggestions(contracts: ContractRecord[]): string[] {
+  return contracts
+    .flatMap((contract) => {
+      if (contract.missingFacts.length > 0) {
+        return `${contract.provider ?? contract.name}: ${contract.missingFacts[0].label} fehlt - bitte ergänzen.`;
+      }
+
+      if (contract.brain.recommendedAction === "cancellation-draft-ready") {
+        return `${contract.provider ?? contract.name}: Kündigung vorbereiten, sobald du die Angaben geprüft hast.`;
+      }
+
+      if (contract.category === "insurance" && contract.dates.cancellationDate) {
+        return `${contract.provider ?? contract.name}: Kündigungsfrist erkannt, bitte prüfen.`;
+      }
+
+      if (contract.category === "authority" && contract.dates.dueDate) {
+        return `${contract.provider ?? contract.name}: Frist erkannt, Antwort vorbereiten.`;
+      }
+
+      return [];
+    })
+    .slice(0, 4);
 }
 
 function formatAnalysisMeta(analysis: DocumentAnalysis): string {
@@ -432,4 +617,10 @@ function formatAnalysisMeta(analysis: DocumentAnalysis): string {
   }
 
   return "Keine offene Prüfung.";
+}
+
+function startOfDay(date: Date): Date {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
 }

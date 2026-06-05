@@ -3,6 +3,9 @@ import type {
   DetectedDeadline,
   Document as LifePilotDocument,
   Reminder,
+  ReminderCreateInput,
+  ReminderRecord,
+  ReminderUpdateInput,
 } from "@lifepilot/shared";
 
 export const remindersStorageKey = "lifepilot:confirmed-reminders:v1";
@@ -130,6 +133,86 @@ export function deleteStoredReminder(reminderId: string): Reminder[] {
   return reminders;
 }
 
+export function readStoredReminderRecords(): ReminderRecord[] {
+  return readStoredReminders().map((reminder) => toReminderRecord(reminder));
+}
+
+export function createReminderRecord(
+  input: ReminderCreateInput,
+): ReminderRecord {
+  return toReminderRecord(
+    createReminder({
+      dueAt: input.dueDate,
+      notes: input.description,
+      source:
+        input.sourceType === "contract-deadline"
+          ? "contract"
+          : input.sourceType ?? "manual",
+      sourceDocumentId: input.sourceDocumentId,
+      sourceLabel:
+        input.sourceType === "contract-deadline"
+          ? "Vertragsfrist"
+          : undefined,
+      title: input.title,
+    }),
+    {
+      priority: input.priority,
+      reminderDate: input.reminderDate,
+      sourceContractId: input.sourceContractId,
+      sourceType: input.sourceType,
+    },
+  );
+}
+
+export function updateStoredReminderRecord(
+  reminderId: string,
+  input: ReminderUpdateInput,
+): ReminderRecord | null {
+  const now = new Date().toISOString();
+  const reminders = readStoredReminders();
+  const existing = reminders.find((reminder) => reminder.id === reminderId);
+
+  if (!existing) {
+    return null;
+  }
+
+  const updated: Reminder = {
+    ...existing,
+    completed: input.status ? input.status === "done" : existing.completed,
+    dueAt: input.dueDate ?? existing.dueAt,
+    notes: input.description ?? existing.notes,
+    title: input.title ?? existing.title,
+    updatedAt: now,
+  };
+
+  writeReminders(
+    reminders.map((reminder) =>
+      reminder.id === reminderId ? updated : reminder,
+    ),
+  );
+
+  return toReminderRecord(updated, {
+    priority: input.priority,
+    reminderDate: input.reminderDate,
+    sourceContractId: input.sourceContractId,
+    sourceType: input.sourceType,
+  });
+}
+
+export function deleteStoredReminderRecord(reminderId: string): boolean {
+  const initialLength = readStoredReminders().length;
+
+  deleteStoredReminder(reminderId);
+
+  return readStoredReminders().length !== initialLength;
+}
+
+export function markStoredReminderDone(
+  reminderId: string,
+): ReminderRecord | null {
+  return updateStoredReminderRecord(reminderId, { status: "done" });
+}
+
 function writeReminders(reminders: Reminder[]): void {
   if (typeof window === "undefined") {
     return;
@@ -158,4 +241,27 @@ function createReminderTitle(
   }
 
   return `Frist prüfen: ${document.name}`;
+}
+
+function toReminderRecord(
+  reminder: Reminder,
+  overrides: Partial<ReminderRecord> = {},
+): ReminderRecord {
+  return {
+    createdAt: reminder.createdAt ?? new Date().toISOString(),
+    description: reminder.notes,
+    dueDate: reminder.dueAt,
+    id: reminder.id,
+    priority: overrides.priority ?? "medium",
+    reminderDate: overrides.reminderDate,
+    sourceContractId: overrides.sourceContractId,
+    sourceDocumentId: reminder.sourceDocumentId,
+    sourceType:
+      overrides.sourceType ??
+      (reminder.source === "contract" ? "contract-deadline" : "document-deadline"),
+    status: reminder.completed ? "done" : "open",
+    title: reminder.title,
+    updatedAt: reminder.updatedAt ?? reminder.createdAt ?? new Date().toISOString(),
+    userId: "local-dev-user",
+  };
 }

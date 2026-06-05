@@ -16,12 +16,80 @@ export type UserRole = "user" | "admin";
 
 export type ContractCategory =
   | "internet"
-  | "fitness"
-  | "energy"
   | "mobile"
+  | "electricity"
+  | "gas"
   | "insurance"
+  | "rent"
+  | "banking"
+  | "loan"
   | "subscription"
+  | "authority"
+  | "healthcare"
+  | "tax"
   | "other";
+
+export type FactConfidence = "high" | "medium" | "low";
+
+export type FactVerificationStatus =
+  | "extracted"
+  | "user-confirmed"
+  | "user-corrected"
+  | "missing"
+  | "not-applicable";
+
+export type ContractLifecycleStatus =
+  | "draft"
+  | "needs-review"
+  | "active"
+  | "cancellable-now"
+  | "cancellation-window-upcoming"
+  | "cancellation-deadline-missed"
+  | "ended"
+  | "unknown";
+
+export type SuggestedContractAction =
+  | "missing-info-needed"
+  | "reminder-needed"
+  | "cancellation-draft-ready"
+  | "offer-comparison-planned"
+  | "contract-review-needed";
+
+export type RequiredFactKey =
+  | "provider"
+  | "category"
+  | "customerNumber"
+  | "contractNumber"
+  | "invoiceNumber"
+  | "fileNumber"
+  | "policyNumber"
+  | "insuranceType"
+  | "authorityName"
+  | "requestedAction"
+  | "amount"
+  | "monthlyPrice"
+  | "monthlyPayment"
+  | "yearlyEstimate"
+  | "monthlyRent"
+  | "paymentInterval"
+  | "startDate"
+  | "contractDate"
+  | "endDate"
+  | "minimumTerm"
+  | "termMonths"
+  | "cancellationPeriod"
+  | "cancellationDate"
+  | "renewalDate"
+  | "dueDate"
+  | "appointmentDate"
+  | "relatedPersonProfileId";
+
+export type ManagedPersonProfileType =
+  | "me"
+  | "partner"
+  | "child"
+  | "household"
+  | "parent";
 
 export type RiskLevel = "low" | "medium" | "high";
 
@@ -79,6 +147,201 @@ export type ReminderSource =
   | "contract"
   | "system";
 
+export type PersistenceStatus =
+  | "local-dev"
+  | "backend-prepared"
+  | "backend-saved"
+  | "backend-failed";
+
+export type ContractSource =
+  | "document-analysis"
+  | "manual"
+  | "import"
+  | "system";
+
+export type ReminderStatus = "open" | "done" | "overdue" | "cancelled";
+
+export type ReminderPriority = "low" | "medium" | "high";
+
+export type ReminderSourceType =
+  | "manual"
+  | "document-deadline"
+  | "contract-deadline"
+  | "system";
+
+export interface UserScopedRecord {
+  createdAt: ISODateString;
+  id: string;
+  sourceDocumentId?: string;
+  updatedAt: ISODateString;
+  userId: string;
+}
+
+export interface DocumentFact<Value = string> {
+  confidence: FactConfidence;
+  key: RequiredFactKey;
+  label: string;
+  sourceSnippet?: string;
+  updatedAt: ISODateString;
+  value?: Value;
+  verificationStatus: FactVerificationStatus;
+}
+
+export type ContractFact<Value = string> = DocumentFact<Value>;
+
+export interface ConfirmedContractFact<Value = string>
+  extends DocumentFact<Value> {
+  confirmedAt: ISODateString;
+  verificationStatus: "user-confirmed" | "user-corrected";
+}
+
+export interface ExtractedDocumentFacts {
+  category?: ContractCategory;
+  createdAt: ISODateString;
+  documentId: string;
+  documentName?: string;
+  facts: Partial<Record<RequiredFactKey, DocumentFact>>;
+  updatedAt: ISODateString;
+}
+
+export interface VerifiedDocumentFacts {
+  contractId?: string;
+  documentId?: string;
+  facts: Partial<Record<RequiredFactKey, DocumentFact>>;
+  updatedAt: ISODateString;
+}
+
+export interface MissingFact {
+  isRequired: boolean;
+  key: RequiredFactKey;
+  label: string;
+  reason: string;
+}
+
+export interface MissingContractFact extends MissingFact {
+  source?: ContractSource;
+}
+
+export interface ManagedPersonProfile {
+  id: string;
+  label: string;
+  type: ManagedPersonProfileType;
+}
+
+export interface PaymentSourceReference {
+  id: string;
+  label: string;
+  type: "bank-account" | "card" | "manual" | "unknown";
+}
+
+export interface ContractIdentifier {
+  customerNumber?: string;
+  contractNumber?: string;
+  fileNumber?: string;
+  invoiceNumber?: string;
+  policyNumber?: string;
+}
+
+export interface ContractCost {
+  amount?: number;
+  currency: "EUR";
+  interval?: "monthly" | "yearly" | "one-time" | "unknown";
+  sourceFactKey?: RequiredFactKey;
+}
+
+export interface ContractDates {
+  appointmentDate?: ISODateString;
+  cancellationDate?: ISODateString;
+  contractDate?: ISODateString;
+  dueDate?: ISODateString;
+  endDate?: ISODateString;
+  renewalDate?: ISODateString;
+  startDate?: ISODateString;
+}
+
+export interface CancellationInfo {
+  cancellationDate?: ISODateString;
+  cancellationPeriod?: string;
+  canPrepareCancellation: boolean;
+}
+
+export interface ContractBrainSummary {
+  isCancellationDeadlineMissed: boolean;
+  isCancellationPossibleNow: boolean;
+  isCancellationWindowUpcoming: boolean;
+  lifecycleStatus: ContractLifecycleStatus;
+  missingFacts: MissingFact[];
+  nextImportantDate?: ISODateString;
+  recommendedAction: SuggestedContractAction;
+}
+
+export interface OfferComparisonIntent {
+  category: ContractCategory;
+  currentPrice?: number;
+  currentProvider?: string;
+  neededData: RequiredFactKey[];
+  status: "planned" | "missing-data";
+}
+
+export interface ContractActionDraft {
+  body: string;
+  createdAt: ISODateString;
+  id: string;
+  status: "draft" | "prepared";
+  title: string;
+  type: "cancellation";
+  updatedAt: ISODateString;
+}
+
+export interface ContractRecord {
+  actionDraft?: ContractActionDraft;
+  brain: ContractBrainSummary;
+  cancellation: CancellationInfo;
+  category: ContractCategory;
+  company?: string;
+  confirmedFacts?: Partial<Record<RequiredFactKey, ConfirmedContractFact>>;
+  cost: ContractCost;
+  createdAt: ISODateString;
+  dates: ContractDates;
+  documentId?: string;
+  facts: Partial<Record<RequiredFactKey, DocumentFact>>;
+  id: string;
+  identifiers: ContractIdentifier;
+  lifecycleStatus: ContractLifecycleStatus;
+  missingFacts: MissingFact[];
+  name: string;
+  offerComparisonIntent?: OfferComparisonIntent;
+  persistenceStatus?: PersistenceStatus;
+  provider?: string;
+  relatedPersonProfileId?: string;
+  source?: ContractSource;
+  sourceDocumentId?: string;
+  updatedAt: ISODateString;
+  userId?: string;
+}
+
+export interface ContractRecordCreateInput {
+  category?: ContractCategory;
+  company?: string;
+  confirmedFacts?: Partial<Record<RequiredFactKey, ConfirmedContractFact>>;
+  cost?: Partial<ContractCost>;
+  dates?: Partial<ContractDates>;
+  facts?: Partial<Record<RequiredFactKey, DocumentFact>>;
+  identifiers?: Partial<ContractIdentifier>;
+  missingFacts?: MissingContractFact[];
+  name?: string;
+  provider?: string;
+  source?: ContractSource;
+  sourceDocumentId?: string;
+}
+
+export interface ContractRecordUpdateInput
+  extends Partial<ContractRecordCreateInput> {
+  actionDraft?: ContractActionDraft;
+  lifecycleStatus?: ContractLifecycleStatus;
+  persistenceStatus?: PersistenceStatus;
+}
+
 export interface LifeGoal {
   id: string;
   title: string;
@@ -116,6 +379,41 @@ export interface Reminder {
   sourceOriginalText?: string;
   createdAt?: ISODateString;
   updatedAt?: ISODateString;
+}
+
+export interface ReminderRecord extends UserScopedRecord {
+  description?: string;
+  dueDate: ISODateString;
+  priority: ReminderPriority;
+  reminderDate?: ISODateString;
+  sourceContractId?: string;
+  sourceDocumentId?: string;
+  sourceType: ReminderSourceType;
+  status: ReminderStatus;
+  title: string;
+}
+
+export interface ReminderCreateInput {
+  description?: string;
+  dueDate: ISODateString;
+  priority?: ReminderPriority;
+  reminderDate?: ISODateString;
+  sourceContractId?: string;
+  sourceDocumentId?: string;
+  sourceType?: ReminderSourceType;
+  title: string;
+}
+
+export interface ReminderUpdateInput {
+  description?: string;
+  dueDate?: ISODateString;
+  priority?: ReminderPriority;
+  reminderDate?: ISODateString;
+  sourceContractId?: string;
+  sourceDocumentId?: string;
+  sourceType?: ReminderSourceType;
+  status?: ReminderStatus;
+  title?: string;
 }
 
 export interface CreateReminderInput {
@@ -209,6 +507,7 @@ export interface DocumentAnalysis {
   documentId: string;
   documentName?: string;
   errorMessage?: string;
+  extractedFacts?: ExtractedDocumentFacts;
   extractedText?: ExtractedText;
   fileName?: string;
   status: AnalysisStatus;

@@ -99,14 +99,10 @@ export class LifePilotFoundationStack extends Stack {
       versioned: true,
     });
 
-    const contractsFunction = this.createPlaceholderFunction(
-      "ContractsFunction",
-      "contracts",
-      {
-        AUTH_PROVIDER: "cognito",
-        CONTRACTS_TABLE_NAME: contractsTable.tableName,
-      },
-    );
+    const contractsFunction = this.createContractsFunction({
+      AUTH_PROVIDER: "cognito",
+      CONTRACTS_TABLE_NAME: contractsTable.tableName,
+    });
 
     const documentsFunction = this.createDocumentsFunction({
       AUTH_PROVIDER: "cognito",
@@ -114,14 +110,10 @@ export class LifePilotFoundationStack extends Stack {
       DOCUMENTS_TABLE_NAME: documentsTable.tableName,
     });
 
-    const remindersFunction = this.createPlaceholderFunction(
-      "RemindersFunction",
-      "reminders",
-      {
-        AUTH_PROVIDER: "cognito",
-        REMINDERS_TABLE_NAME: remindersTable.tableName,
-      },
-    );
+    const remindersFunction = this.createRemindersFunction({
+      AUTH_PROVIDER: "cognito",
+      REMINDERS_TABLE_NAME: remindersTable.tableName,
+    });
 
     const aiAnalysisFunction = this.createPlaceholderFunction(
       "AiAnalysisFunction",
@@ -149,7 +141,7 @@ export class LifePilotFoundationStack extends Stack {
           "X-Api-Key",
           "X-Amz-Security-Token",
         ],
-        allowMethods: ["GET", "POST", "DELETE", "OPTIONS"],
+        allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allowOrigins: ["http://localhost:3000"],
       },
       deployOptions: {
@@ -190,6 +182,12 @@ export class LifePilotFoundationStack extends Stack {
     );
 
     contractResource.addMethod(
+      "PATCH",
+      new LambdaIntegration(contractsFunction),
+      auth,
+    );
+
+    contractResource.addMethod(
       "DELETE",
       new LambdaIntegration(contractsFunction),
       auth,
@@ -218,9 +216,39 @@ export class LifePilotFoundationStack extends Stack {
       .addResource("complete")
       .addMethod("POST", new LambdaIntegration(documentsFunction), auth);
 
-    api.root
-      .addResource("reminders")
-      .addMethod("POST", new LambdaIntegration(remindersFunction), auth);
+    const remindersResource = api.root.addResource("reminders");
+
+    remindersResource.addMethod(
+      "GET",
+      new LambdaIntegration(remindersFunction),
+      auth,
+    );
+
+    remindersResource.addMethod(
+      "POST",
+      new LambdaIntegration(remindersFunction),
+      auth,
+    );
+
+    const reminderResource = remindersResource.addResource("{reminderId}");
+
+    reminderResource.addMethod(
+      "GET",
+      new LambdaIntegration(remindersFunction),
+      auth,
+    );
+
+    reminderResource.addMethod(
+      "PATCH",
+      new LambdaIntegration(remindersFunction),
+      auth,
+    );
+
+    reminderResource.addMethod(
+      "DELETE",
+      new LambdaIntegration(remindersFunction),
+      auth,
+    );
 
     api.root
       .addResource("ai-analysis")
@@ -282,6 +310,22 @@ exports.handler = async function handler(event) {
     });
   }
 
+  private createContractsFunction(
+    environment: Record<string, string>,
+  ): NodejsFunction {
+    return new NodejsFunction(this, "ContractsFunction", {
+      bundling: {
+        minify: false,
+        sourceMap: true,
+      },
+      entry: join(__dirname, "..", "..", "functions", "contracts", "index.ts"),
+      environment,
+      handler: "handler",
+      runtime: Runtime.NODEJS_22_X,
+      timeout: Duration.seconds(20),
+    });
+  }
+
   private createDocumentsFunction(
     environment: Record<string, string>,
   ): NodejsFunction {
@@ -291,6 +335,22 @@ exports.handler = async function handler(event) {
         sourceMap: true,
       },
       entry: join(__dirname, "..", "..", "functions", "documents", "index.ts"),
+      environment,
+      handler: "handler",
+      runtime: Runtime.NODEJS_22_X,
+      timeout: Duration.seconds(20),
+    });
+  }
+
+  private createRemindersFunction(
+    environment: Record<string, string>,
+  ): NodejsFunction {
+    return new NodejsFunction(this, "RemindersFunction", {
+      bundling: {
+        minify: false,
+        sourceMap: true,
+      },
+      entry: join(__dirname, "..", "..", "functions", "reminders", "index.ts"),
       environment,
       handler: "handler",
       runtime: Runtime.NODEJS_22_X,

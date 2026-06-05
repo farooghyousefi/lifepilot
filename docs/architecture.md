@@ -2,14 +2,14 @@
 
 LifePilot is a personal administration assistant, not a generic AI app. The product is organized around documents, contracts, bills, letters, deadlines, appointments, and next actions for normal non-technical users.
 
-The current architecture is split into product surfaces, shared code, browser-local document intelligence, serverless placeholders, and AWS infrastructure preparation.
+The current architecture is split into product surfaces, shared code, browser-local document intelligence, a prepared Memory Core service layer, serverless functions, and AWS infrastructure preparation.
 
 ## Product Surfaces
 
 - `apps/web`: Next.js App Router landing page, calm LifePilot Command Center, document intake workspace, reminders workspace, and local/dev product routes with Tailwind CSS.
 - `apps/mobile`: Expo React Native skeleton for the future mobile experience.
 
-Both clients currently use `@lifepilot/api-client` with mock data. The web dashboard accesses contracts through `apps/web/src/services/contracts` so the data source can switch from mocks to an API Gateway-backed client later.
+The web app now uses `apps/web/src/services/memory` for contracts and reminders. That service can call the API client when backend persistence is configured, and falls back to explicit local/dev browser storage when the backend is unavailable.
 
 The web app also exposes local Next.js API routes under `/api` to simulate parts of the API Gateway/Lambda boundary before deployment.
 
@@ -18,7 +18,7 @@ Current web product routes:
 - `/login`: public mock sign-in UI
 - `/register`: public mock account creation UI
 - `/dashboard`: LifePilot Command Center for deadlines, document intake, reminders, contracts, and next actions
-- `/contracts`: contract overview, summaries, contract cards, and local add-contract form through `ContractService`
+- `/contracts`: Contract Brain view for saved local `ContractRecord`s, missing facts, cancellation draft preparation, and offer comparison intents
 - `/goals`: goals and focus areas
 - `/documents`: document overview, presigned-upload-aware workflow, local TXT text extraction, deterministic deadline detection, and detail panel
 - `/reminders`: reminder agenda
@@ -29,7 +29,64 @@ Current web product routes:
 
 Document intake is intentionally local/dev for analysis. It does not call an AI provider and does not pretend PDF/OCR is complete. Real S3/DynamoDB persistence depends on AWS deployment.
 
-## Command Center + Document Intake Foundation
+## LifePilot Memory Core MVP
+
+The Memory Core sprint prepares SaaS persistence for contracts and reminders without deploying AWS.
+
+Shared records:
+
+- `UserScopedRecord`
+- `PersistenceStatus`
+- `ContractRecord`
+- `ContractFact`
+- `ConfirmedContractFact`
+- `MissingContractFact`
+- `ContractSource`
+- `ReminderRecord`
+- `ReminderStatus`
+- `ReminderPriority`
+- `ReminderSourceType`
+- `ReminderCreateInput`
+- `ReminderUpdateInput`
+
+DynamoDB design:
+
+- Separate tables are used because this is simpler and safer for the current product stage.
+- `ContractsTable` uses `userId` as partition key and `contractId` as sort key.
+- `RemindersTable` uses `userId` as partition key and `reminderId` as sort key.
+- Both tables use on-demand billing.
+- API handlers derive `userId` from Cognito authorizer claims and ignore frontend-supplied user ids.
+- Reminder records store `dueDate` and `status` attributes so upcoming reminder queries can be added later.
+
+Prepared API routes:
+
+- `GET /contracts`
+- `POST /contracts`
+- `GET /contracts/{contractId}`
+- `PATCH /contracts/{contractId}`
+- `DELETE /contracts/{contractId}`
+- `GET /reminders`
+- `POST /reminders`
+- `GET /reminders/{reminderId}`
+- `PATCH /reminders/{reminderId}`
+- `DELETE /reminders/{reminderId}`
+
+Frontend behavior:
+
+- `LifePilotMemoryService` tries backend persistence when `NEXT_PUBLIC_USE_MOCKS=false`.
+- If the backend is unavailable, the service falls back to browser-local storage.
+- The UI shows clear German persistence messages and does not pretend backend saving worked.
+- `/contracts`, `/reminders`, `/dashboard`, and document-derived reminders use the Memory Core path.
+
+Still local/dev-only until deployment:
+
+- Browser-local document analysis.
+- Browser-local extracted facts.
+- Browser-local Contract Brain records when backend mode is not available.
+- Browser-local reminders when backend mode is not available.
+- Cancellation drafts and offer-comparison intents.
+
+## Document Knowledge Base + Contract Brain MVP
 
 The first vertical product workflow focuses on the visible LifePilot loop:
 
@@ -50,6 +107,14 @@ Current implementation:
   - phrases such as `bis zum`, `fällig am`, `Kündigungsfrist`, and `Zahlungsfrist`
 - Results are shown as "Gefundene Frist / Möglicher Termin" style candidates.
 - Results are stored locally in browser `localStorage` under the web client, not in production storage.
+- Structured document facts are extracted as candidates with value, confidence, source snippet, verification status, and `updatedAt`.
+- Extracted facts are stored locally under `lifepilot.local.knowledge.v1`.
+- The `/documents` detail panel includes a German fact review section.
+- Missing required fields are derived from the detected category and shown only when needed.
+- The user can save reviewed facts as a local `ContractRecord`.
+- Contract Brain calculates lifecycle status, next important date, cancellation readiness, missing facts, and recommended action.
+- `/contracts` reads local `ContractRecord`s instead of fake demo contracts.
+- Action Agent foundation can prepare a local cancellation draft and local offer comparison intent without sending or calling external services.
 - The user can confirm a detected candidate as a reminder.
 - Confirmed document reminders are stored locally in browser `localStorage` under `lifepilot:confirmed-reminders:v1`.
 - The Command Center reads local analysis and reminder results, then shows confirmed reminders before raw candidate deadlines.
@@ -62,6 +127,7 @@ Current limitations:
 - Image OCR is represented by a clean placeholder state.
 - AI provider integration is not implemented and requires a backend-only provider boundary later.
 - Local/dev analysis is device-local and not synchronized.
+- Local/dev ContractRecords, verified facts, missing facts, action drafts, and offer comparison intents are device-local and not synchronized.
 - Local/dev reminders are device-local and not synchronized.
 - Production persistence requires AWS credentials, CDK deploy, and live S3/API validation.
 
@@ -72,19 +138,35 @@ Future backend direction:
 - Add OCR for images/scans.
 - Add AI analysis behind the API, never from the frontend with raw provider keys.
 - Persist confirmed reminders in DynamoDB under Cognito `userId`.
+- Persist extracted facts, verified facts, ContractRecords, missing facts, action drafts, and comparison intents in DynamoDB under Cognito `userId`.
 - Later connect reminders to calendar, email, push notifications, and subscription entitlements.
+
+Not implemented yet:
+
+- production persistence
+- real AWS deploy
+- real PDF extraction
+- real OCR
+- real AI extraction
+- banking APIs
+- comparison portals
+- email/calendar sending
+- automatic cancellation
 
 Next product milestones:
 
 1. Real PDF text extraction.
-2. Photo OCR.
-3. Reminder backend with DynamoDB.
-4. Contract Cockpit.
-5. AI document explanation through a safe backend boundary.
-6. Calendar integration.
-7. Email import.
-8. Subscription system.
-9. Mobile app.
+2. Photo OCR for letters.
+3. Backend persistence for documents/contracts/reminders/action drafts.
+4. AI structured extraction with source evidence.
+5. Contract Cockpit production version.
+6. Offer comparison integration.
+7. Calendar integration.
+8. Email import and email draft creation.
+9. Banking/finance aggregation.
+10. Mobile camera app.
+11. Subscription system.
+12. Privacy/security hardening.
 
 Local API simulation routes:
 
@@ -104,7 +186,7 @@ Route boundaries are documented in `apps/web/src/navigation/routes.ts`:
 
 The app routes use `AuthGuard`. Without an active session, users are redirected to `/login?redirect=...`. Cognito can be enabled with `NEXT_PUBLIC_USE_MOCK_AUTH=false`; local mock auth remains available for development.
 
-## Phase 2 Contract Dashboard
+## Earlier Phase: Contract Dashboard
 
 The `/dashboard` route provides the first contract and cost management surface. It loads contracts through `ContractService`, which selects either `MockContractService` or `ApiContractService`.
 
@@ -141,22 +223,24 @@ The web auth boundary is prepared through a service abstraction:
 - App routes use `AuthGuard` and redirect unauthenticated users to `/login`.
 - API client auth helpers can attach bearer headers for the deployed API boundary.
 
-## Phase 3 Contract Backend Foundation
+## Contract Backend Foundation
 
-Contract backend preparation is in place without connecting the frontend to AWS:
+Contract backend preparation is in place without deploying AWS:
 
 - `packages/shared` defines `Contract`, `ContractCategory`, `RiskLevel`, `ContractStatus`, `CreateContractInput`, and `ContractSummary`.
-- `packages/api-client` exposes `listContracts`, `createContract`, `getContract`, and `deleteContract` with mock fallback behavior.
-- `lambdas/contracts` contains handler modules for listing, creating, reading, and deleting contracts.
-- `infra/cdk` prepares a DynamoDB contracts table and API Gateway routes for the contract domain.
+- `packages/shared` also defines backend-ready `ContractRecord` and reminder record types.
+- `packages/api-client` exposes typed contract and reminder CRUD helpers.
+- `infra/cdk/functions/contracts` contains the prepared DynamoDB-backed contract API handler.
+- `infra/cdk/functions/reminders` contains the prepared DynamoDB-backed reminder API handler.
+- `infra/cdk` prepares DynamoDB tables and API Gateway routes for the contract and reminder domains.
 
-The dashboard still uses mock data and local state. No real contract data is stored or fetched from AWS in this phase.
+No real contract or reminder data is stored in AWS until the stack is deployed and validated.
 
 ## Serverless Domains
 
-- `contracts`: Placeholder for contract analysis and lifecycle checks.
+- `contracts`: Prepared CRUD API for user-scoped contract records.
 - `documents`: Placeholder for document metadata, uploads, and S3 coordination.
-- `reminders`: Placeholder for reminder scheduling and notification orchestration.
+- `reminders`: Prepared CRUD API for user-scoped reminder records.
 - `ai-analysis`: Placeholder for future AI-assisted insights.
 
 ## AWS Foundation
@@ -167,7 +251,8 @@ The CDK stack prepares:
 - DynamoDB tables for goals, reminders, documents, and contracts
 - S3 bucket for documents
 - REST API resources protected by Cognito authorizer
-- Inline placeholder Lambda functions with least-privilege grants
+- Packaged Lambda functions for documents, contracts, and reminders
+- Inline placeholder Lambda functions for not-yet-built domains
 
 Lambda placeholders are prepared to read the future authenticated user id from API Gateway Cognito JWT claims, using `claims.sub`. Frontend-supplied `userId` must not be trusted for real data access.
 

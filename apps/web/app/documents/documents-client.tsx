@@ -21,14 +21,20 @@ import {
 } from "lucide-react";
 import { createLifePilotClient } from "@lifepilot/api-client";
 import type {
+  ContractCategory,
+  ContractRecord,
   CreateDocumentInput,
   DetectedDeadline,
+  DocumentFact,
   DocumentAnalysis,
   Document as LifePilotDocument,
   DocumentCategory,
   DocumentStatus,
+  ExtractedDocumentFacts,
+  MissingFact,
   Reminder,
   RequestDocumentUploadInput,
+  RequiredFactKey,
 } from "@lifepilot/shared";
 
 import {
@@ -42,10 +48,20 @@ import {
   storeDocumentAnalysis,
 } from "../../src/services/documents";
 import {
-  createReminderFromDeadline,
   getDeadlineReminderKey,
   readStoredReminders,
 } from "../../src/services/reminders";
+import {
+  factLabels,
+  getMissingRequiredFacts,
+  listContractRecords,
+  managedPersonProfiles,
+  saveExtractedFacts,
+} from "../../src/services/knowledge";
+import {
+  createPersistedReminder,
+  savePersistedContract,
+} from "../../src/services/memory";
 
 const documentClient = createLifePilotClient({
   baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
@@ -182,15 +198,21 @@ export function DocumentsClient() {
     let isMounted = true;
 
     const storedAnalyses = readStoredDocumentAnalyses();
+    const localAnalysisDocuments = createDocumentsFromAnalyses(storedAnalyses);
+
     setAnalyses(
       Object.fromEntries(
         storedAnalyses.map((analysis) => [analysis.documentId, analysis]),
       ),
     );
+    setDocuments(localAnalysisDocuments);
+    setSelectedDocument(localAnalysisDocuments[0] ?? null);
     setConfirmedReminderKeys(createConfirmedReminderKeys(readStoredReminders()));
 
     async function loadDocuments() {
-      await attachCognitoToken();
+      if (process.env.NEXT_PUBLIC_USE_MOCKS === "false") {
+        await attachCognitoToken();
+      }
 
       const result = await documentClient.listDocuments();
 
@@ -205,13 +227,15 @@ export function DocumentsClient() {
       setLoadError(null);
     }
 
-    loadDocuments().catch((error) => {
-      console.error("Failed to load documents", error);
+    loadDocuments().catch(() => {
       if (isMounted) {
-        setDocuments([]);
-        setSelectedDocument(null);
-        setLoadError(
-          "Dokumente konnten nicht vom Backend geladen werden. Du kannst die lokale Dev-Analyse trotzdem testen.",
+        setDocuments((current) =>
+          current.length > 0 ? current : localAnalysisDocuments,
+        );
+        setSelectedDocument((current) => current ?? localAnalysisDocuments[0] ?? null);
+        setLoadError(null);
+        setLocalDevNotice(
+          "Backend-Speicherung vorbereitet, aber aktuell nicht erreichbar. Du kannst lokal weiterarbeiten; Daten werden im Browser gespeichert.",
         );
       }
     });
@@ -337,6 +361,9 @@ export function DocumentsClient() {
       });
 
       storeDocumentAnalysis(analysis);
+      if (analysis.extractedFacts) {
+        saveExtractedFacts(uploadedDocument.id, analysis.extractedFacts);
+      }
       setDocuments((current) => [uploadedDocument, ...current]);
       setSelectedDocument(uploadedDocument);
       setAnalyses((current) => ({
@@ -349,8 +376,7 @@ export function DocumentsClient() {
       setSuccessMessage(
         "Dokument wurde hochgeladen und lokal analysiert.",
       );
-    } catch (error) {
-      console.error("Failed to upload document", error);
+    } catch {
       const localDocument = createLocalDevDocument(form, selectedFile);
       const analysis = await analyzeDocumentFile({
         document: localDocument,
@@ -358,6 +384,9 @@ export function DocumentsClient() {
       });
 
       storeDocumentAnalysis(analysis);
+      if (analysis.extractedFacts) {
+        saveExtractedFacts(localDocument.id, analysis.extractedFacts);
+      }
       setDocuments((current) => [localDocument, ...current]);
       setSelectedDocument(localDocument);
       setAnalyses((current) => ({
@@ -380,23 +409,34 @@ export function DocumentsClient() {
     setIsMobileDetailOpen(true);
   };
 
-  const createDeadlineReminder = (
+  const createDeadlineReminder = async (
     document: LifePilotDocument,
     deadline: DetectedDeadline,
   ) => {
     setReminderMessage(null);
 
-    try {
-      createReminderFromDeadline({ deadline, document });
-      setConfirmedReminderKeys(createConfirmedReminderKeys(readStoredReminders()));
-      setReminderMessage(
-        "Erinnerung wurde lokal erstellt und erscheint im Dashboard.",
-      );
-    } catch {
+    if (!deadline.dateIso) {
       setReminderMessage(
         "Für diese Frist fehlt noch ein klares Datum. Bitte prüfe den Text manuell.",
       );
+      return;
     }
+
+    const result = await createPersistedReminder({
+      description: deadline.originalText,
+      dueDate: `${deadline.dateIso}T09:00:00.000Z`,
+      priority: deadline.kind === "kuendigung" ? "high" : "medium",
+      sourceDocumentId: document.id,
+      sourceType: "document-deadline",
+      title: createDeadlineReminderTitle(deadline, document),
+    });
+
+    setConfirmedReminderKeys((current) => {
+      const next = new Set(current);
+      next.add(getDeadlineReminderKey({ deadline, documentId: document.id }));
+      return next;
+    });
+    setReminderMessage(`Erinnerung erstellt. ${result.message}`);
   };
 
   return (
@@ -803,6 +843,9 @@ function DocumentDetailPanel({
         document={document}
         onCreateReminder={onCreateReminder}
       />
+
+      <FactReviewPanel analysis={analysis} document={document} />
+
       <div className="mt-6 rounded-[18px] bg-[#F2FAF6] p-4">
         <div className="flex items-center gap-2 text-[14px] font-bold text-[#2FA779]">
           <ShieldCheck className="size-5" aria-hidden="true" />
@@ -1023,6 +1066,485 @@ function UploadDialog({
       </form>
     </div>
   );
+}
+
+const contractCategoryLabels: Record<ContractCategory, string> = {
+  authority: "Behörde",
+  banking: "Banking",
+  electricity: "Strom",
+  gas: "Gas",
+  healthcare: "Gesundheit",
+  insurance: "Versicherung",
+  internet: "Internet",
+  loan: "Kredit",
+  mobile: "Mobilfunk",
+  other: "Sonstiges",
+  rent: "Miete",
+  subscription: "Abo",
+  tax: "Steuer",
+};
+
+const reviewFactKeys: RequiredFactKey[] = [
+  "provider",
+  "category",
+  "customerNumber",
+  "contractNumber",
+  "invoiceNumber",
+  "fileNumber",
+  "policyNumber",
+  "insuranceType",
+  "amount",
+  "monthlyPrice",
+  "monthlyPayment",
+  "yearlyEstimate",
+  "monthlyRent",
+  "paymentInterval",
+  "startDate",
+  "contractDate",
+  "minimumTerm",
+  "cancellationPeriod",
+  "cancellationDate",
+  "dueDate",
+  "appointmentDate",
+  "requestedAction",
+  "relatedPersonProfileId",
+];
+
+const verificationLabels: Record<DocumentFact["verificationStatus"], string> = {
+  extracted: "erkannt",
+  missing: "fehlt",
+  "not-applicable": "nicht relevant",
+  "user-confirmed": "bestätigt",
+  "user-corrected": "korrigiert",
+};
+
+function FactReviewPanel({
+  analysis,
+  document,
+}: {
+  analysis?: DocumentAnalysis;
+  document: LifePilotDocument;
+}) {
+  const extractedFacts = analysis?.extractedFacts;
+  const [edits, setEdits] = useState<Partial<Record<RequiredFactKey, string>>>(
+    {},
+  );
+  const [selectedCategory, setSelectedCategory] =
+    useState<ContractCategory>("other");
+  const [savedRecord, setSavedRecord] = useState<ContractRecord | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [isSavingRecord, setIsSavingRecord] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
+  const [confirmedKeys, setConfirmedKeys] = useState<Set<RequiredFactKey>>(
+    new Set(),
+  );
+
+  useEffect(() => {
+    if (!extractedFacts) {
+      return;
+    }
+
+    const nextEdits = Object.fromEntries(
+      reviewFactKeys.map((key) => [
+        key,
+        extractedFacts.facts[key]?.value?.toString() ?? "",
+      ]),
+    ) as Partial<Record<RequiredFactKey, string>>;
+    const category =
+      (extractedFacts.facts.category?.value as ContractCategory | undefined) ??
+      extractedFacts.category ??
+      "other";
+    const existingRecord =
+      listContractRecords().find(
+        (contract) => contract.documentId === document.id,
+      ) ?? null;
+
+    setEdits({
+      ...nextEdits,
+      category,
+      relatedPersonProfileId:
+        nextEdits.relatedPersonProfileId ?? "profile-me",
+    });
+    setSelectedCategory(category);
+    setSavedRecord(existingRecord);
+  }, [document.id, extractedFacts]);
+
+  if (!analysis) {
+    return null;
+  }
+
+  if (!extractedFacts) {
+    return (
+      <section className="mt-6 rounded-[18px] border border-[#ECEFEB] bg-white p-4">
+        <div className="flex items-center gap-2 text-[14px] font-bold text-[#101828]">
+          <FileText className="size-5 text-[#2FA779]" aria-hidden="true" />
+          Gefundene Daten prüfen
+        </div>
+        <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
+          Für dieses Dokument wurden noch keine strukturierten Fakten erkannt.
+          TXT-Dateien liefern aktuell die besten lokalen Ergebnisse.
+        </p>
+      </section>
+    );
+  }
+
+  if (isDismissed) {
+    return (
+      <section className="mt-6 rounded-[18px] border border-[#ECEFEB] bg-white p-4">
+        <p className="text-[14px] font-bold text-[#101828]">
+          Dieses Dokument wurde nicht gespeichert.
+        </p>
+        <button
+          className="mt-3 rounded-xl border border-[#ECEFEB] bg-white px-4 py-2 text-[13px] font-bold text-[#2FA779]"
+          onClick={() => setIsDismissed(false)}
+          type="button"
+        >
+          Wieder prüfen
+        </button>
+      </section>
+    );
+  }
+
+  const facts = buildReviewFacts({
+    edits,
+    extractedFacts,
+    selectedCategory,
+    confirmedKeys,
+  });
+  const missingFacts = getMissingRequiredFacts(selectedCategory, facts);
+
+  const updateEdit = (key: RequiredFactKey, value: string) => {
+    setEdits((current) => ({
+      ...current,
+      [key]: value,
+    }));
+
+    if (key === "category") {
+      setSelectedCategory(value as ContractCategory);
+    }
+  };
+
+  const confirmAllVisibleFacts = () => {
+    setConfirmedKeys(
+      new Set(
+        reviewFactKeys.filter((key) => Boolean(getEditedValue(edits, key))),
+      ),
+    );
+    setMessage("Angaben wurden lokal bestätigt. Speichere sie jetzt als Vertrag oder Vorgang.");
+  };
+
+  const saveRecord = async (mode: "authority" | "contract") => {
+    const category = mode === "authority" ? "authority" : selectedCategory;
+    setIsSavingRecord(true);
+
+    const result = await savePersistedContract({
+      category,
+      facts: buildReviewFacts({
+        edits: {
+          ...edits,
+          category,
+        },
+        extractedFacts,
+        selectedCategory: category,
+        confirmedKeys: new Set(reviewFactKeys),
+      }),
+      name:
+        getEditedValue(edits, "provider") ||
+        getEditedValue(edits, "authorityName") ||
+        document.name,
+      source: "document-analysis",
+      sourceDocumentId: document.id,
+    });
+    const record = result.data;
+
+    saveExtractedFacts(document.id, {
+      ...extractedFacts,
+      category,
+      facts: record.facts,
+      updatedAt: new Date().toISOString(),
+    });
+    setSavedRecord(record);
+    setMessage(
+      mode === "authority"
+        ? `Behördenschreiben wurde gespeichert. ${result.message}`
+        : `Vertrag wurde gespeichert. ${result.message}`,
+    );
+    setIsSavingRecord(false);
+  };
+
+  return (
+    <section className="mt-6 rounded-[18px] border border-[#DDEFE6] bg-[#F8FCFA] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-[14px] font-bold text-[#101828]">
+            <FileText className="size-5 text-[#2FA779]" aria-hidden="true" />
+            Gefundene Daten prüfen
+          </div>
+          <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
+            Jede Angabe ist zuerst nur ein Kandidat. Bestätige oder korrigiere
+            sie einmal, danach merkt LifePilot sie lokal.
+          </p>
+        </div>
+        {savedRecord ? (
+          <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-[#2FA779]">
+            {savedRecord.persistenceStatus === "backend-saved"
+              ? "Gespeichert"
+              : "Entwicklungsmodus"}
+          </span>
+        ) : null}
+      </div>
+
+      {message ? (
+        <div className="mt-4 rounded-[16px] border border-[#DDEFE6] bg-white px-4 py-3 text-[13px] font-bold text-[#2FA779]">
+          {message}
+        </div>
+      ) : null}
+
+      {missingFacts.length > 0 ? (
+        <div className="mt-4 rounded-[16px] border border-[#FDECCB] bg-[#FFF7EA] p-4">
+          <p className="text-[14px] font-bold text-[#101828]">
+            Diese Angaben brauche ich noch, damit LifePilot zuverlässig
+            überwachen kann.
+          </p>
+          <div className="mt-3 grid gap-3">
+            {missingFacts.map((missingFact) => (
+              <MissingFactInput
+                key={missingFact.key}
+                missingFact={missingFact}
+                onChange={(value) => updateEdit(missingFact.key, value)}
+                value={getEditedValue(edits, missingFact.key)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-4 grid gap-3">
+        {reviewFactKeys.map((key) => {
+          const fact = facts[key];
+
+          return (
+            <FactReviewRow
+              fact={fact}
+              factKey={key}
+              key={key}
+              onChange={(value) => updateEdit(key, value)}
+              selectedCategory={selectedCategory}
+              value={getEditedValue(edits, key)}
+            />
+          );
+        })}
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <button
+          className="rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866]"
+          onClick={confirmAllVisibleFacts}
+          type="button"
+        >
+          Angaben bestätigen
+        </button>
+        <button
+          className="rounded-xl border border-[#FDECCB] bg-white px-4 py-3 text-[13px] font-bold text-[#D98806]"
+          onClick={() =>
+            setMessage(
+              missingFacts.length > 0
+                ? "Ergänze nur die kritischen Felder oben. Mehr fragt LifePilot nicht ab."
+                : "Keine kritischen Pflichtangaben offen.",
+            )
+          }
+          type="button"
+        >
+          Fehlende Angaben ergänzen
+        </button>
+        <button
+          className="rounded-xl border border-[#DDEFE6] bg-white px-4 py-3 text-[13px] font-bold text-[#2FA779]"
+          disabled={isSavingRecord}
+          onClick={() => saveRecord("contract")}
+          type="button"
+        >
+          {isSavingRecord ? "Wird gespeichert..." : "Als Vertrag speichern"}
+        </button>
+        <button
+          className="rounded-xl border border-[#ECEFEB] bg-white px-4 py-3 text-[13px] font-bold text-[#344054]"
+          disabled={isSavingRecord}
+          onClick={() => saveRecord("authority")}
+          type="button"
+        >
+          Als Behördenschreiben speichern
+        </button>
+        <button
+          className="rounded-xl bg-[#F7F8F5] px-4 py-3 text-[13px] font-bold text-[#667085] sm:col-span-2"
+          onClick={() => setIsDismissed(true)}
+          type="button"
+        >
+          Nicht speichern
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function MissingFactInput({
+  missingFact,
+  onChange,
+  value,
+}: {
+  missingFact: MissingFact;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[13px] font-bold text-[#344054]">
+        {missingFact.label}
+      </span>
+      <input
+        className="mt-2 w-full rounded-xl border border-[#FDECCB] bg-white px-4 py-3 text-[14px] font-semibold text-[#101828] outline-none transition focus:border-[#D98806]"
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Bitte ergänzen"
+        value={value}
+      />
+    </label>
+  );
+}
+
+function FactReviewRow({
+  fact,
+  factKey,
+  onChange,
+  selectedCategory,
+  value,
+}: {
+  fact?: DocumentFact;
+  factKey: RequiredFactKey;
+  onChange: (value: string) => void;
+  selectedCategory: ContractCategory;
+  value: string;
+}) {
+  const key = fact?.key ?? factKey;
+  const status = fact?.verificationStatus ?? "missing";
+
+  return (
+    <div className="rounded-[16px] border border-[#ECEFEB] bg-white p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[13px] font-bold text-[#101828]">
+            {fact?.label ?? factLabels[key]}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <span className="rounded-full bg-[#F7F8F5] px-3 py-1 text-[11px] font-bold text-[#667085]">
+              {verificationLabels[status]}
+            </span>
+            {fact ? (
+              <span className="rounded-full bg-[#EAF7F0] px-3 py-1 text-[11px] font-bold text-[#2FA779]">
+                Sicherheit: {fact.confidence}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        {key === "category" ? (
+          <select
+            className="w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[13px] font-bold text-[#101828] outline-none lg:w-56"
+            onChange={(event) => onChange(event.target.value)}
+            value={selectedCategory}
+          >
+            {Object.entries(contractCategoryLabels).map(([category, label]) => (
+              <option key={category} value={category}>
+                {label}
+              </option>
+            ))}
+          </select>
+        ) : key === "relatedPersonProfileId" ? (
+          <select
+            className="w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[13px] font-bold text-[#101828] outline-none lg:w-56"
+            onChange={(event) => onChange(event.target.value)}
+            value={value || "profile-me"}
+          >
+            {managedPersonProfiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            className="w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[13px] font-bold text-[#101828] outline-none lg:w-56"
+            onChange={(event) => onChange(event.target.value)}
+            placeholder="Fehlt"
+            value={value}
+          />
+        )}
+      </div>
+      {fact?.sourceSnippet ? (
+        <p className="mt-3 rounded-[12px] bg-[#FCFBFA] px-3 py-2 text-[12px] font-semibold leading-5 text-[#667085]">
+          Quelle: {fact.sourceSnippet}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function buildReviewFacts({
+  confirmedKeys,
+  edits,
+  extractedFacts,
+  selectedCategory,
+}: {
+  confirmedKeys: Set<RequiredFactKey>;
+  edits: Partial<Record<RequiredFactKey, string>>;
+  extractedFacts: ExtractedDocumentFacts;
+  selectedCategory: ContractCategory;
+}): Partial<Record<RequiredFactKey, DocumentFact>> {
+  const now = new Date().toISOString();
+  const facts: Partial<Record<RequiredFactKey, DocumentFact>> = {
+    ...extractedFacts.facts,
+  };
+
+  reviewFactKeys.forEach((key) => {
+    const value =
+      key === "category"
+        ? selectedCategory
+        : key === "relatedPersonProfileId"
+          ? getEditedValue(edits, key) || "profile-me"
+          : getEditedValue(edits, key);
+    const existingFact = extractedFacts.facts[key];
+
+    if (!value) {
+      facts[key] = {
+        confidence: "low",
+        key,
+        label: factLabels[key],
+        sourceSnippet: existingFact?.sourceSnippet,
+        updatedAt: now,
+        verificationStatus: "missing",
+      };
+      return;
+    }
+
+    facts[key] = {
+      confidence: confirmedKeys.has(key) || !existingFact ? "high" : existingFact.confidence,
+      key,
+      label: factLabels[key],
+      sourceSnippet: existingFact?.sourceSnippet,
+      updatedAt: now,
+      value,
+      verificationStatus: confirmedKeys.has(key)
+        ? "user-confirmed"
+        : existingFact?.value && existingFact.value !== value
+          ? "user-corrected"
+          : existingFact?.verificationStatus ?? "extracted",
+    };
+  });
+
+  return facts;
+}
+
+function getEditedValue(
+  edits: Partial<Record<RequiredFactKey, string>>,
+  key: RequiredFactKey,
+): string {
+  return edits[key]?.toString().trim() ?? "";
 }
 
 function DocumentAnalysisPanel({
@@ -1267,6 +1789,47 @@ function createLocalDevDocument(
     status: form.status,
     uploadStatus: "metadata-only",
   };
+}
+
+function createDocumentsFromAnalyses(
+  analyses: DocumentAnalysis[],
+): LifePilotDocument[] {
+  return analyses.map((analysis) => ({
+    addedAt: analysis.analyzedAt ?? new Date().toISOString(),
+    category: "contracts",
+    contentType: analysis.contentType,
+    fileName: analysis.fileName,
+    id: analysis.documentId,
+    name: analysis.documentName ?? "Lokal analysiertes Dokument",
+    recommendedAction:
+      analysis.detectedDeadlines.length > 0
+        ? "Prüfe die erkannten Fristen und erstelle bei Bedarf eine Erinnerung."
+        : "Prüfe die lokal erkannte Analyse.",
+    securityNote:
+      "Lokaler Dev-Modus: Diese Dokumentansicht kommt aus dem Browser-Speicher.",
+    status:
+      analysis.detectedDeadlines.length > 0 ? "needs-review" : "protected",
+    uploadStatus: "metadata-only",
+  }));
+}
+
+function createDeadlineReminderTitle(
+  deadline: DetectedDeadline,
+  document: LifePilotDocument,
+): string {
+  if (deadline.kind === "kuendigung") {
+    return `Kündigungsfrist prüfen: ${document.name}`;
+  }
+
+  if (deadline.kind === "zahlung") {
+    return `Zahlungsfrist prüfen: ${document.name}`;
+  }
+
+  if (deadline.kind === "termin") {
+    return `Termin prüfen: ${document.name}`;
+  }
+
+  return `Frist prüfen: ${document.name}`;
 }
 
 function createConfirmedReminderKeys(reminders: Reminder[]): Set<string> {
