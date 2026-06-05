@@ -3,12 +3,17 @@ import type {
   AuthSession,
   CompleteDocumentUploadResult,
   Contract,
+  ContractRecord,
+  ContractRecordCreateInput,
+  ContractRecordUpdateInput,
   ContractSummary,
   CompleteDocumentUploadInput,
-  CreateContractInput,
   CreateDocumentInput,
   Document,
   LifePilotSnapshot,
+  ReminderCreateInput,
+  ReminderRecord,
+  ReminderUpdateInput,
   RequestDocumentUploadInput,
   RequestDocumentUploadResult,
   VaultItem,
@@ -214,6 +219,8 @@ const mockVaultItems: VaultItem[] = [
 ];
 
 const mockRuntimeDocuments: Document[] = [];
+const mockContractRecords: ContractRecord[] = [];
+const mockReminderRecords: ReminderRecord[] = [];
 
 export const getMockContracts = (): Contract[] =>
   mockContracts.map((contract) => ({ ...contract }));
@@ -226,33 +233,146 @@ export const getMockDocuments = (): Document[] =>
 export const getMockVaultItems = (): VaultItem[] =>
   mockVaultItems.map((item) => ({ ...item }));
 
-const getMockContractById = (contractId: string): Contract | undefined =>
-  mockContracts.find((contract) => contract.contractId === contractId);
-
 const getMockDocumentById = (documentId: string): Document | undefined =>
   getMockDocuments().find((document) => document.id === documentId);
 
-const createMockContract = (input: CreateContractInput): Contract => {
-  const contractId = `contract-${Date.now()}`;
+const createMockContractRecord = (
+  input: ContractRecordCreateInput,
+): ContractRecord => {
   const now = new Date().toISOString();
-
-  return {
-    id: contractId,
-    contractId,
-    provider: input.provider,
-    category: input.category,
-    monthlyCost: input.monthlyCost,
-    contractEnd: input.contractEnd,
-    cancellationDeadlineDays: input.cancellationDeadlineDays,
-    status: input.status ?? "draft",
-    statusLabel:
-      input.statusLabel ??
-      `Kündigungsfrist in ${input.cancellationDeadlineDays} Tagen`,
-    riskLevel: input.riskLevel ?? "low",
-    annualSavingsPotential: input.annualSavingsPotential ?? 0,
+  const contractId = `contract-record-${Date.now()}`;
+  const missingFacts = input.missingFacts ?? [];
+  const provider = input.provider ?? input.company ?? "Unbenannter Anbieter";
+  const contract: ContractRecord = {
+    brain: {
+      isCancellationDeadlineMissed: false,
+      isCancellationPossibleNow: false,
+      isCancellationWindowUpcoming: false,
+      lifecycleStatus: missingFacts.length > 0 ? "needs-review" : "active",
+      missingFacts,
+      nextImportantDate: input.dates?.cancellationDate,
+      recommendedAction:
+        missingFacts.length > 0 ? "missing-info-needed" : "reminder-needed",
+    },
+    cancellation: {
+      cancellationDate: input.dates?.cancellationDate,
+      canPrepareCancellation: missingFacts.length === 0,
+    },
+    category: input.category ?? "other",
+    company: input.company ?? provider,
+    confirmedFacts: input.confirmedFacts,
+    cost: {
+      currency: "EUR",
+      ...(input.cost ?? {}),
+    },
     createdAt: now,
+    dates: input.dates ?? {},
+    documentId: input.sourceDocumentId,
+    facts: input.facts ?? {},
+    id: contractId,
+    identifiers: input.identifiers ?? {},
+    lifecycleStatus: missingFacts.length > 0 ? "needs-review" : "active",
+    missingFacts,
+    name: input.name ?? provider,
+    persistenceStatus: "local-dev",
+    provider,
+    source: input.source ?? "manual",
+    sourceDocumentId: input.sourceDocumentId,
     updatedAt: now,
+    userId: "mock-user",
   };
+
+  mockContractRecords.unshift(contract);
+
+  return { ...contract };
+};
+
+const updateMockContractRecord = (
+  contractId: string,
+  input: ContractRecordUpdateInput,
+): ContractRecord | null => {
+  const index = mockContractRecords.findIndex(
+    (contract) => contract.id === contractId,
+  );
+
+  if (index < 0) {
+    return null;
+  }
+
+  const existing = mockContractRecords[index];
+  const updated: ContractRecord = {
+    ...existing,
+    ...input,
+    cost: {
+      ...existing.cost,
+      ...(input.cost ?? {}),
+    },
+    dates: {
+      ...existing.dates,
+      ...(input.dates ?? {}),
+    },
+    facts: {
+      ...existing.facts,
+      ...(input.facts ?? {}),
+    },
+    identifiers: {
+      ...existing.identifiers,
+      ...(input.identifiers ?? {}),
+    },
+    updatedAt: new Date().toISOString(),
+  };
+
+  mockContractRecords[index] = updated;
+
+  return { ...updated };
+};
+
+const createMockReminderRecord = (
+  input: ReminderCreateInput,
+): ReminderRecord => {
+  const now = new Date().toISOString();
+  const reminder: ReminderRecord = {
+    createdAt: now,
+    description: input.description,
+    dueDate: input.dueDate,
+    id: `reminder-record-${Date.now()}`,
+    priority: input.priority ?? "medium",
+    reminderDate: input.reminderDate,
+    sourceContractId: input.sourceContractId,
+    sourceDocumentId: input.sourceDocumentId,
+    sourceType: input.sourceType ?? "manual",
+    status: "open",
+    title: input.title,
+    updatedAt: now,
+    userId: "mock-user",
+  };
+
+  mockReminderRecords.unshift(reminder);
+
+  return { ...reminder };
+};
+
+const updateMockReminderRecord = (
+  reminderId: string,
+  input: ReminderUpdateInput,
+): ReminderRecord | null => {
+  const index = mockReminderRecords.findIndex(
+    (reminder) => reminder.id === reminderId,
+  );
+
+  if (index < 0) {
+    return null;
+  }
+
+  const updated: ReminderRecord = {
+    ...mockReminderRecords[index],
+    ...input,
+    updatedAt: new Date().toISOString(),
+  };
+
+  mockReminderRecords[index] = updated;
+
+  return { ...updated };
 };
 
 const createMockDocument = (input: CreateDocumentInput): Document => {
@@ -419,10 +539,10 @@ export class LifePilotApiClient {
     return response.json() as Promise<ApiResult<AuthSession>>;
   }
 
-  async listContracts(): Promise<ApiResult<Contract[]>> {
+  async listContracts(): Promise<ApiResult<ContractRecord[]>> {
     if (this.useMockData) {
       return {
-        data: getMockContracts(),
+        data: mockContractRecords.map((contract) => ({ ...contract })),
         requestId: "mock-contracts-list",
         source: "mock",
       };
@@ -436,15 +556,15 @@ export class LifePilotApiClient {
       throw new Error(`Life Pilot API request failed: ${response.status}`);
     }
 
-    return response.json() as Promise<ApiResult<Contract[]>>;
+    return response.json() as Promise<ApiResult<ContractRecord[]>>;
   }
 
   async createContract(
-    input: CreateContractInput,
-  ): Promise<ApiResult<Contract>> {
+    input: ContractRecordCreateInput,
+  ): Promise<ApiResult<ContractRecord>> {
     if (this.useMockData) {
       return {
-        data: createMockContract(input),
+        data: createMockContractRecord(input),
         requestId: "mock-contracts-create",
         source: "mock",
       };
@@ -463,13 +583,17 @@ export class LifePilotApiClient {
       throw new Error(`Life Pilot API request failed: ${response.status}`);
     }
 
-    return response.json() as Promise<ApiResult<Contract>>;
+    return response.json() as Promise<ApiResult<ContractRecord>>;
   }
 
-  async getContract(contractId: string): Promise<ApiResult<Contract | null>> {
+  async getContract(
+    contractId: string,
+  ): Promise<ApiResult<ContractRecord | null>> {
     if (this.useMockData) {
       return {
-        data: getMockContractById(contractId) ?? null,
+        data:
+          mockContractRecords.find((contract) => contract.id === contractId) ??
+          null,
         requestId: "mock-contracts-get",
         source: "mock",
       };
@@ -483,17 +607,54 @@ export class LifePilotApiClient {
       throw new Error(`Life Pilot API request failed: ${response.status}`);
     }
 
-    return response.json() as Promise<ApiResult<Contract | null>>;
+    return response.json() as Promise<ApiResult<ContractRecord | null>>;
+  }
+
+  async updateContract(
+    contractId: string,
+    input: ContractRecordUpdateInput,
+  ): Promise<ApiResult<ContractRecord | null>> {
+    if (this.useMockData) {
+      return {
+        data: updateMockContractRecord(contractId, input),
+        requestId: "mock-contracts-update",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(`${this.baseUrl}/contracts/${contractId}`, {
+      body: JSON.stringify(input),
+      headers: {
+        ...this.getAuthHeaders(),
+        "content-type": "application/json",
+      },
+      method: "PATCH",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<ApiResult<ContractRecord | null>>;
   }
 
   async deleteContract(
     contractId: string,
   ): Promise<ApiResult<{ contractId: string; deleted: boolean }>> {
     if (this.useMockData) {
+      const index = mockContractRecords.findIndex(
+        (contract) => contract.id === contractId,
+      );
+      const deleted = index >= 0;
+
+      if (deleted) {
+        mockContractRecords.splice(index, 1);
+      }
+
       return {
         data: {
           contractId,
-          deleted: Boolean(getMockContractById(contractId)),
+          deleted,
         },
         requestId: "mock-contracts-delete",
         source: "mock",
@@ -512,6 +673,148 @@ export class LifePilotApiClient {
     return response.json() as Promise<
       ApiResult<{ contractId: string; deleted: boolean }>
     >;
+  }
+
+  async listReminders(): Promise<ApiResult<ReminderRecord[]>> {
+    if (this.useMockData) {
+      return {
+        data: mockReminderRecords.map((reminder) => ({ ...reminder })),
+        requestId: "mock-reminders-list",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(`${this.baseUrl}/reminders`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<ApiResult<ReminderRecord[]>>;
+  }
+
+  async createReminder(
+    input: ReminderCreateInput,
+  ): Promise<ApiResult<ReminderRecord>> {
+    if (this.useMockData) {
+      return {
+        data: createMockReminderRecord(input),
+        requestId: "mock-reminders-create",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(`${this.baseUrl}/reminders`, {
+      body: JSON.stringify(input),
+      headers: {
+        ...this.getAuthHeaders(),
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<ApiResult<ReminderRecord>>;
+  }
+
+  async getReminder(
+    reminderId: string,
+  ): Promise<ApiResult<ReminderRecord | null>> {
+    if (this.useMockData) {
+      return {
+        data:
+          mockReminderRecords.find((reminder) => reminder.id === reminderId) ??
+          null,
+        requestId: "mock-reminders-get",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(`${this.baseUrl}/reminders/${reminderId}`, {
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<ApiResult<ReminderRecord | null>>;
+  }
+
+  async updateReminder(
+    reminderId: string,
+    input: ReminderUpdateInput,
+  ): Promise<ApiResult<ReminderRecord | null>> {
+    if (this.useMockData) {
+      return {
+        data: updateMockReminderRecord(reminderId, input),
+        requestId: "mock-reminders-update",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(`${this.baseUrl}/reminders/${reminderId}`, {
+      body: JSON.stringify(input),
+      headers: {
+        ...this.getAuthHeaders(),
+        "content-type": "application/json",
+      },
+      method: "PATCH",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<ApiResult<ReminderRecord | null>>;
+  }
+
+  async deleteReminder(
+    reminderId: string,
+  ): Promise<ApiResult<{ deleted: boolean; reminderId: string }>> {
+    if (this.useMockData) {
+      const index = mockReminderRecords.findIndex(
+        (reminder) => reminder.id === reminderId,
+      );
+      const deleted = index >= 0;
+
+      if (deleted) {
+        mockReminderRecords.splice(index, 1);
+      }
+
+      return {
+        data: {
+          deleted,
+          reminderId,
+        },
+        requestId: "mock-reminders-delete",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(`${this.baseUrl}/reminders/${reminderId}`, {
+      headers: this.getAuthHeaders(),
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<
+      ApiResult<{ deleted: boolean; reminderId: string }>
+    >;
+  }
+
+  async markReminderDone(
+    reminderId: string,
+  ): Promise<ApiResult<ReminderRecord | null>> {
+    return this.updateReminder(reminderId, { status: "done" });
   }
 
   async listDocuments(): Promise<ApiResult<Document[]>> {
@@ -709,26 +1012,69 @@ export const getAuthSession = (
 
 export const listContracts = (
   options?: LifePilotClientOptions,
-): Promise<ApiResult<Contract[]>> =>
+): Promise<ApiResult<ContractRecord[]>> =>
   createLifePilotClient(options).listContracts();
 
 export const createContract = (
-  input: CreateContractInput,
+  input: ContractRecordCreateInput,
   options?: LifePilotClientOptions,
-): Promise<ApiResult<Contract>> =>
+): Promise<ApiResult<ContractRecord>> =>
   createLifePilotClient(options).createContract(input);
 
 export const getContract = (
   contractId: string,
   options?: LifePilotClientOptions,
-): Promise<ApiResult<Contract | null>> =>
+): Promise<ApiResult<ContractRecord | null>> =>
   createLifePilotClient(options).getContract(contractId);
+
+export const updateContract = (
+  contractId: string,
+  input: ContractRecordUpdateInput,
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<ContractRecord | null>> =>
+  createLifePilotClient(options).updateContract(contractId, input);
 
 export const deleteContract = (
   contractId: string,
   options?: LifePilotClientOptions,
 ): Promise<ApiResult<{ contractId: string; deleted: boolean }>> =>
   createLifePilotClient(options).deleteContract(contractId);
+
+export const listReminders = (
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<ReminderRecord[]>> =>
+  createLifePilotClient(options).listReminders();
+
+export const createReminder = (
+  input: ReminderCreateInput,
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<ReminderRecord>> =>
+  createLifePilotClient(options).createReminder(input);
+
+export const getReminder = (
+  reminderId: string,
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<ReminderRecord | null>> =>
+  createLifePilotClient(options).getReminder(reminderId);
+
+export const updateReminder = (
+  reminderId: string,
+  input: ReminderUpdateInput,
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<ReminderRecord | null>> =>
+  createLifePilotClient(options).updateReminder(reminderId, input);
+
+export const deleteReminder = (
+  reminderId: string,
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<{ deleted: boolean; reminderId: string }>> =>
+  createLifePilotClient(options).deleteReminder(reminderId);
+
+export const markReminderDone = (
+  reminderId: string,
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<ReminderRecord | null>> =>
+  createLifePilotClient(options).markReminderDone(reminderId);
 
 export const listDocuments = (
   options?: LifePilotClientOptions,

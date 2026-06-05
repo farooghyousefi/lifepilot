@@ -48,18 +48,20 @@ import {
   storeDocumentAnalysis,
 } from "../../src/services/documents";
 import {
-  createReminderFromDeadline,
   getDeadlineReminderKey,
   readStoredReminders,
 } from "../../src/services/reminders";
 import {
-  createOrUpdateContractRecord,
   factLabels,
   getMissingRequiredFacts,
   listContractRecords,
   managedPersonProfiles,
   saveExtractedFacts,
 } from "../../src/services/knowledge";
+import {
+  createPersistedReminder,
+  savePersistedContract,
+} from "../../src/services/memory";
 
 const documentClient = createLifePilotClient({
   baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
@@ -196,15 +198,21 @@ export function DocumentsClient() {
     let isMounted = true;
 
     const storedAnalyses = readStoredDocumentAnalyses();
+    const localAnalysisDocuments = createDocumentsFromAnalyses(storedAnalyses);
+
     setAnalyses(
       Object.fromEntries(
         storedAnalyses.map((analysis) => [analysis.documentId, analysis]),
       ),
     );
+    setDocuments(localAnalysisDocuments);
+    setSelectedDocument(localAnalysisDocuments[0] ?? null);
     setConfirmedReminderKeys(createConfirmedReminderKeys(readStoredReminders()));
 
     async function loadDocuments() {
-      await attachCognitoToken();
+      if (process.env.NEXT_PUBLIC_USE_MOCKS === "false") {
+        await attachCognitoToken();
+      }
 
       const result = await documentClient.listDocuments();
 
@@ -219,13 +227,15 @@ export function DocumentsClient() {
       setLoadError(null);
     }
 
-    loadDocuments().catch((error) => {
-      console.error("Failed to load documents", error);
+    loadDocuments().catch(() => {
       if (isMounted) {
-        setDocuments([]);
-        setSelectedDocument(null);
-        setLoadError(
-          "Dokumente konnten nicht vom Backend geladen werden. Du kannst die lokale Dev-Analyse trotzdem testen.",
+        setDocuments((current) =>
+          current.length > 0 ? current : localAnalysisDocuments,
+        );
+        setSelectedDocument((current) => current ?? localAnalysisDocuments[0] ?? null);
+        setLoadError(null);
+        setLocalDevNotice(
+          "Backend-Speicherung vorbereitet, aber aktuell nicht erreichbar. Du kannst lokal weiterarbeiten; Daten werden im Browser gespeichert.",
         );
       }
     });
@@ -366,8 +376,7 @@ export function DocumentsClient() {
       setSuccessMessage(
         "Dokument wurde hochgeladen und lokal analysiert.",
       );
-    } catch (error) {
-      console.error("Failed to upload document", error);
+    } catch {
       const localDocument = createLocalDevDocument(form, selectedFile);
       const analysis = await analyzeDocumentFile({
         document: localDocument,
@@ -400,23 +409,34 @@ export function DocumentsClient() {
     setIsMobileDetailOpen(true);
   };
 
-  const createDeadlineReminder = (
+  const createDeadlineReminder = async (
     document: LifePilotDocument,
     deadline: DetectedDeadline,
   ) => {
     setReminderMessage(null);
 
-    try {
-      createReminderFromDeadline({ deadline, document });
-      setConfirmedReminderKeys(createConfirmedReminderKeys(readStoredReminders()));
-      setReminderMessage(
-        "Erinnerung wurde lokal erstellt und erscheint im Dashboard.",
-      );
-    } catch {
+    if (!deadline.dateIso) {
       setReminderMessage(
         "Für diese Frist fehlt noch ein klares Datum. Bitte prüfe den Text manuell.",
       );
+      return;
     }
+
+    const result = await createPersistedReminder({
+      description: deadline.originalText,
+      dueDate: `${deadline.dateIso}T09:00:00.000Z`,
+      priority: deadline.kind === "kuendigung" ? "high" : "medium",
+      sourceDocumentId: document.id,
+      sourceType: "document-deadline",
+      title: createDeadlineReminderTitle(deadline, document),
+    });
+
+    setConfirmedReminderKeys((current) => {
+      const next = new Set(current);
+      next.add(getDeadlineReminderKey({ deadline, documentId: document.id }));
+      return next;
+    });
+    setReminderMessage(`Erinnerung erstellt. ${result.message}`);
   };
 
   return (
@@ -1113,6 +1133,7 @@ function FactReviewPanel({
     useState<ContractCategory>("other");
   const [savedRecord, setSavedRecord] = useState<ContractRecord | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [isSavingRecord, setIsSavingRecord] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
   const [confirmedKeys, setConfirmedKeys] = useState<Set<RequiredFactKey>>(
     new Set(),
@@ -1212,11 +1233,12 @@ function FactReviewPanel({
     setMessage("Angaben wurden lokal bestätigt. Speichere sie jetzt als Vertrag oder Vorgang.");
   };
 
-  const saveRecord = (mode: "authority" | "contract") => {
+  const saveRecord = async (mode: "authority" | "contract") => {
     const category = mode === "authority" ? "authority" : selectedCategory;
-    const record = createOrUpdateContractRecord({
+    setIsSavingRecord(true);
+
+    const result = await savePersistedContract({
       category,
-      documentId: document.id,
       facts: buildReviewFacts({
         edits: {
           ...edits,
@@ -1230,7 +1252,10 @@ function FactReviewPanel({
         getEditedValue(edits, "provider") ||
         getEditedValue(edits, "authorityName") ||
         document.name,
+      source: "document-analysis",
+      sourceDocumentId: document.id,
     });
+    const record = result.data;
 
     saveExtractedFacts(document.id, {
       ...extractedFacts,
@@ -1241,9 +1266,10 @@ function FactReviewPanel({
     setSavedRecord(record);
     setMessage(
       mode === "authority"
-        ? "Behördenschreiben wurde lokal als Vorgang gespeichert."
-        : "Vertrag wurde lokal im Contract Brain gespeichert.",
+        ? `Behördenschreiben wurde gespeichert. ${result.message}`
+        : `Vertrag wurde gespeichert. ${result.message}`,
     );
+    setIsSavingRecord(false);
   };
 
   return (
@@ -1261,7 +1287,9 @@ function FactReviewPanel({
         </div>
         {savedRecord ? (
           <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-[#2FA779]">
-            Lokal gespeichert
+            {savedRecord.persistenceStatus === "backend-saved"
+              ? "Gespeichert"
+              : "Entwicklungsmodus"}
           </span>
         ) : null}
       </div>
@@ -1331,13 +1359,15 @@ function FactReviewPanel({
         </button>
         <button
           className="rounded-xl border border-[#DDEFE6] bg-white px-4 py-3 text-[13px] font-bold text-[#2FA779]"
+          disabled={isSavingRecord}
           onClick={() => saveRecord("contract")}
           type="button"
         >
-          Als Vertrag speichern
+          {isSavingRecord ? "Wird gespeichert..." : "Als Vertrag speichern"}
         </button>
         <button
           className="rounded-xl border border-[#ECEFEB] bg-white px-4 py-3 text-[13px] font-bold text-[#344054]"
+          disabled={isSavingRecord}
           onClick={() => saveRecord("authority")}
           type="button"
         >
@@ -1759,6 +1789,47 @@ function createLocalDevDocument(
     status: form.status,
     uploadStatus: "metadata-only",
   };
+}
+
+function createDocumentsFromAnalyses(
+  analyses: DocumentAnalysis[],
+): LifePilotDocument[] {
+  return analyses.map((analysis) => ({
+    addedAt: analysis.analyzedAt ?? new Date().toISOString(),
+    category: "contracts",
+    contentType: analysis.contentType,
+    fileName: analysis.fileName,
+    id: analysis.documentId,
+    name: analysis.documentName ?? "Lokal analysiertes Dokument",
+    recommendedAction:
+      analysis.detectedDeadlines.length > 0
+        ? "Prüfe die erkannten Fristen und erstelle bei Bedarf eine Erinnerung."
+        : "Prüfe die lokal erkannte Analyse.",
+    securityNote:
+      "Lokaler Dev-Modus: Diese Dokumentansicht kommt aus dem Browser-Speicher.",
+    status:
+      analysis.detectedDeadlines.length > 0 ? "needs-review" : "protected",
+    uploadStatus: "metadata-only",
+  }));
+}
+
+function createDeadlineReminderTitle(
+  deadline: DetectedDeadline,
+  document: LifePilotDocument,
+): string {
+  if (deadline.kind === "kuendigung") {
+    return `Kündigungsfrist prüfen: ${document.name}`;
+  }
+
+  if (deadline.kind === "zahlung") {
+    return `Zahlungsfrist prüfen: ${document.name}`;
+  }
+
+  if (deadline.kind === "termin") {
+    return `Termin prüfen: ${document.name}`;
+  }
+
+  return `Frist prüfen: ${document.name}`;
 }
 
 function createConfirmedReminderKeys(reminders: Reminder[]): Set<string> {

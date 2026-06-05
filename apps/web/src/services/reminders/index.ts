@@ -1,10 +1,15 @@
 export {
   createReminder,
   createReminderFromDeadline,
+  createReminderRecord,
+  deleteStoredReminderRecord,
   deleteStoredReminder,
   getDeadlineReminderKey,
   hasReminderForDeadline,
+  markStoredReminderDone,
+  readStoredReminderRecords,
   readStoredReminders,
   remindersStorageKey,
   toggleReminderCompleted,
+  updateStoredReminderRecord,
 } from "./reminder-service";

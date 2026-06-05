@@ -147,6 +147,36 @@ export type ReminderSource =
   | "contract"
   | "system";
 
+export type PersistenceStatus =
+  | "local-dev"
+  | "backend-prepared"
+  | "backend-saved"
+  | "backend-failed";
+
+export type ContractSource =
+  | "document-analysis"
+  | "manual"
+  | "import"
+  | "system";
+
+export type ReminderStatus = "open" | "done" | "overdue" | "cancelled";
+
+export type ReminderPriority = "low" | "medium" | "high";
+
+export type ReminderSourceType =
+  | "manual"
+  | "document-deadline"
+  | "contract-deadline"
+  | "system";
+
+export interface UserScopedRecord {
+  createdAt: ISODateString;
+  id: string;
+  sourceDocumentId?: string;
+  updatedAt: ISODateString;
+  userId: string;
+}
+
 export interface DocumentFact<Value = string> {
   confidence: FactConfidence;
   key: RequiredFactKey;
@@ -155,6 +185,14 @@ export interface DocumentFact<Value = string> {
   updatedAt: ISODateString;
   value?: Value;
   verificationStatus: FactVerificationStatus;
+}
+
+export type ContractFact<Value = string> = DocumentFact<Value>;
+
+export interface ConfirmedContractFact<Value = string>
+  extends DocumentFact<Value> {
+  confirmedAt: ISODateString;
+  verificationStatus: "user-confirmed" | "user-corrected";
 }
 
 export interface ExtractedDocumentFacts {
@@ -178,6 +216,10 @@ export interface MissingFact {
   key: RequiredFactKey;
   label: string;
   reason: string;
+}
+
+export interface MissingContractFact extends MissingFact {
+  source?: ContractSource;
 }
 
 export interface ManagedPersonProfile {
@@ -256,6 +298,8 @@ export interface ContractRecord {
   brain: ContractBrainSummary;
   cancellation: CancellationInfo;
   category: ContractCategory;
+  company?: string;
+  confirmedFacts?: Partial<Record<RequiredFactKey, ConfirmedContractFact>>;
   cost: ContractCost;
   createdAt: ISODateString;
   dates: ContractDates;
@@ -267,9 +311,35 @@ export interface ContractRecord {
   missingFacts: MissingFact[];
   name: string;
   offerComparisonIntent?: OfferComparisonIntent;
+  persistenceStatus?: PersistenceStatus;
   provider?: string;
   relatedPersonProfileId?: string;
+  source?: ContractSource;
+  sourceDocumentId?: string;
   updatedAt: ISODateString;
+  userId?: string;
+}
+
+export interface ContractRecordCreateInput {
+  category?: ContractCategory;
+  company?: string;
+  confirmedFacts?: Partial<Record<RequiredFactKey, ConfirmedContractFact>>;
+  cost?: Partial<ContractCost>;
+  dates?: Partial<ContractDates>;
+  facts?: Partial<Record<RequiredFactKey, DocumentFact>>;
+  identifiers?: Partial<ContractIdentifier>;
+  missingFacts?: MissingContractFact[];
+  name?: string;
+  provider?: string;
+  source?: ContractSource;
+  sourceDocumentId?: string;
+}
+
+export interface ContractRecordUpdateInput
+  extends Partial<ContractRecordCreateInput> {
+  actionDraft?: ContractActionDraft;
+  lifecycleStatus?: ContractLifecycleStatus;
+  persistenceStatus?: PersistenceStatus;
 }
 
 export interface LifeGoal {
@@ -309,6 +379,41 @@ export interface Reminder {
   sourceOriginalText?: string;
   createdAt?: ISODateString;
   updatedAt?: ISODateString;
+}
+
+export interface ReminderRecord extends UserScopedRecord {
+  description?: string;
+  dueDate: ISODateString;
+  priority: ReminderPriority;
+  reminderDate?: ISODateString;
+  sourceContractId?: string;
+  sourceDocumentId?: string;
+  sourceType: ReminderSourceType;
+  status: ReminderStatus;
+  title: string;
+}
+
+export interface ReminderCreateInput {
+  description?: string;
+  dueDate: ISODateString;
+  priority?: ReminderPriority;
+  reminderDate?: ISODateString;
+  sourceContractId?: string;
+  sourceDocumentId?: string;
+  sourceType?: ReminderSourceType;
+  title: string;
+}
+
+export interface ReminderUpdateInput {
+  description?: string;
+  dueDate?: ISODateString;
+  priority?: ReminderPriority;
+  reminderDate?: ISODateString;
+  sourceContractId?: string;
+  sourceDocumentId?: string;
+  sourceType?: ReminderSourceType;
+  status?: ReminderStatus;
+  title?: string;
 }
 
 export interface CreateReminderInput {

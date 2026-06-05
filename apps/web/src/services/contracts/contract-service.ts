@@ -1,14 +1,13 @@
 import type {
-  Contract,
+  ContractRecord,
+  ContractRecordCreateInput,
   ContractSummary,
-  CreateContractInput,
 } from "@lifepilot/shared";
 
 export interface ContractService {
-  createContract(input: CreateContractInput): Promise<Contract>;
+  createContract(input: ContractRecordCreateInput): Promise<ContractRecord>;
   deleteContract(contractId: string): Promise<boolean>;
-  getContract(contractId: string): Promise<Contract | null>;
-  getSummary(contracts: Contract[]): ContractSummary;
-  listContracts(): Promise<Contract[]>;
+  getContract(contractId: string): Promise<ContractRecord | null>;
+  getSummary(contracts: ContractRecord[]): ContractSummary;
+  listContracts(): Promise<ContractRecord[]>;
 }
-

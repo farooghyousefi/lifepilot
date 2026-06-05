@@ -12,6 +12,7 @@ import {
   Printer,
   Scissors,
   Search,
+  Trash2,
 } from "lucide-react";
 import type {
   ContractCategory,
@@ -22,10 +23,14 @@ import {
   correctFact,
   createCancellationDraft,
   createOfferComparisonIntent,
-  listContractRecords,
   markActionDraftPrepared,
   updateActionDraftBody,
 } from "../../src/services/knowledge";
+import {
+  deletePersistedContract,
+  listPersistedContracts,
+  updatePersistedContract,
+} from "../../src/services/memory";
 import {
   LifePilotShell,
   PageHeader,
@@ -101,9 +106,12 @@ export function ContractsClient() {
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [activeFilter, setActiveFilter] = useState<ContractFilter>("all");
   const [message, setMessage] = useState<string | null>(null);
+  const [persistenceMessage, setPersistenceMessage] = useState(
+    "Backend-Speicherung vorbereitet, aber noch nicht deployed.",
+  );
 
   useEffect(() => {
-    setContracts(listContractRecords());
+    void refreshContracts();
   }, []);
 
   const filteredContracts = useMemo(
@@ -154,8 +162,11 @@ export function ContractsClient() {
     },
   ] as const;
 
-  const refreshContracts = () => {
-    setContracts(listContractRecords());
+  const refreshContracts = async () => {
+    const result = await listPersistedContracts();
+
+    setContracts(result.data);
+    setPersistenceMessage(result.message);
   };
 
   const handleCreateDraft = (contract: ContractRecord) => {
@@ -169,7 +180,7 @@ export function ContractsClient() {
     }
 
     setMessage("Kündigungsentwurf wurde lokal vorbereitet.");
-    refreshContracts();
+    void refreshContracts();
   };
 
   const handleComparisonIntent = (contract: ContractRecord) => {
@@ -184,7 +195,18 @@ export function ContractsClient() {
         ? "Angebotsvergleich vorbereitet. Live-Vergleichsportale werden später integriert."
         : "Angebotsvergleich vorbereitet. Es fehlen noch Angaben für einen späteren Live-Vergleich.",
     );
-    refreshContracts();
+    void refreshContracts();
+  };
+
+  const handleDeleteContract = async (contract: ContractRecord) => {
+    const result = await deletePersistedContract(contract.id);
+
+    setMessage(
+      result.data
+        ? `Vertrag wurde gelöscht. ${result.message}`
+        : "Vertrag konnte nicht gelöscht werden.",
+    );
+    await refreshContracts();
   };
 
   return (
@@ -199,9 +221,8 @@ export function ContractsClient() {
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 size-5 shrink-0 text-[#D98806]" />
           <p className="text-[13px] font-semibold leading-6 text-[#667085]">
-            Lokaler Dev-Modus: Vertragsdaten, Fakten und Entwürfe werden
-            aktuell im Browser gespeichert. Es werden keine Kündigungen
-            versendet und keine Vergleichsportale aufgerufen.
+            {persistenceMessage} Es werden keine Kündigungen versendet und
+            keine Vergleichsportale aufgerufen.
           </p>
         </div>
       </section>
@@ -268,7 +289,8 @@ export function ContractsClient() {
                 key={contract.id}
                 onComparisonIntent={() => handleComparisonIntent(contract)}
                 onCreateDraft={() => handleCreateDraft(contract)}
-                onRefresh={refreshContracts}
+                onDelete={() => void handleDeleteContract(contract)}
+                onRefresh={() => void refreshContracts()}
               />
             ))
           ) : (
@@ -298,11 +320,13 @@ function ContractBrainCard({
   contract,
   onComparisonIntent,
   onCreateDraft,
+  onDelete,
   onRefresh,
 }: {
   contract: ContractRecord;
   onComparisonIntent: () => void;
   onCreateDraft: () => void;
+  onDelete: () => void;
   onRefresh: () => void;
 }) {
   const [missingValues, setMissingValues] = useState<Record<string, string>>({});
@@ -312,14 +336,21 @@ function ContractBrainCard({
     setDraftBody(contract.actionDraft?.body ?? "");
   }, [contract.actionDraft?.body]);
 
-  const saveMissingValues = () => {
+  const saveMissingValues = async () => {
+    let updatedContract: ContractRecord | null = contract;
+
     contract.missingFacts.forEach((missingFact) => {
       const value = missingValues[missingFact.key]?.trim();
 
       if (value) {
-        correctFact(contract.id, missingFact.key, value);
+        updatedContract = correctFact(contract.id, missingFact.key, value);
       }
     });
+
+    if (updatedContract) {
+      await updatePersistedContract(contract.id, updatedContract);
+    }
+
     setMissingValues({});
     onRefresh();
   };
@@ -354,10 +385,16 @@ function ContractBrainCard({
             <h3 className="text-[17px] font-bold tracking-[-0.01em] text-[#101828]">
               {contract.provider ?? contract.name}
             </h3>
-            <span className="rounded-full bg-white px-3 py-1 text-[12px] font-bold text-[#667085]">
-              {categoryLabels[contract.category]}
-            </span>
-          </div>
+          <span className="rounded-full bg-white px-3 py-1 text-[12px] font-bold text-[#667085]">
+            {categoryLabels[contract.category]}
+          </span>
+          <span className="rounded-full bg-white px-3 py-1 text-[12px] font-bold text-[#667085]">
+            Datenquelle:{" "}
+            {contract.source === "document-analysis"
+              ? "Dokumentanalyse"
+              : "Manuell"}
+          </span>
+        </div>
           <p className="mt-2 text-[14px] font-semibold text-[#667085]">
             {actionLabels[contract.brain.recommendedAction]}
           </p>
@@ -440,6 +477,14 @@ function ContractBrainCard({
         >
           <Search className="size-4" aria-hidden="true" />
           Angebotsvergleich vorbereiten
+        </button>
+        <button
+          className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#F3D9D4] bg-white px-4 py-3 text-[13px] font-bold text-[#E14C45] shadow-button transition hover:bg-[#FFF3F1]"
+          onClick={onDelete}
+          type="button"
+        >
+          <Trash2 className="size-4" aria-hidden="true" />
+          Löschen
         </button>
       </div>
 

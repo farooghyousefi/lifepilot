@@ -1,12 +1,8 @@
-import {
-  calculateContractSummary,
-  createLifePilotClient,
-  type LifePilotApiClient,
-} from "@lifepilot/api-client";
+import { createLifePilotClient, type LifePilotApiClient } from "@lifepilot/api-client";
 import type {
-  Contract,
+  ContractRecord,
+  ContractRecordCreateInput,
   ContractSummary,
-  CreateContractInput,
 } from "@lifepilot/shared";
 import type { ContractService } from "./contract-service";
 
@@ -24,19 +20,19 @@ export class ApiContractService implements ContractService {
     });
   }
 
-  async listContracts(): Promise<Contract[]> {
+  async listContracts(): Promise<ContractRecord[]> {
     const result = await this.apiClient.listContracts();
 
     return result.data;
   }
 
-  async createContract(input: CreateContractInput): Promise<Contract> {
+  async createContract(input: ContractRecordCreateInput): Promise<ContractRecord> {
     const result = await this.apiClient.createContract(input);
 
     return result.data;
   }
 
-  async getContract(contractId: string): Promise<Contract | null> {
+  async getContract(contractId: string): Promise<ContractRecord | null> {
     const result = await this.apiClient.getContract(contractId);
 
     return result.data;
@@ -48,7 +44,25 @@ export class ApiContractService implements ContractService {
     return result.data.deleted;
   }
 
-  getSummary(contracts: Contract[]): ContractSummary {
-    return calculateContractSummary(contracts);
+  getSummary(contracts: ContractRecord[]): ContractSummary {
+    return summarizeContractRecords(contracts);
   }
+}
+
+function summarizeContractRecords(
+  contracts: ContractRecord[],
+): ContractSummary {
+  return {
+    activeContracts: contracts.length,
+    annualSavingsPotential: 0,
+    criticalDeadlines: contracts.filter(
+      (contract) =>
+        contract.lifecycleStatus === "cancellable-now" ||
+        contract.lifecycleStatus === "cancellation-window-upcoming",
+    ).length,
+    monthlyFixedCosts: contracts.reduce(
+      (total, contract) => total + (contract.cost.amount ?? 0),
+      0,
+    ),
+  };
 }

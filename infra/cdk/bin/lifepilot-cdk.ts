@@ -14,9 +14,11 @@ new LifePilotFoundationStack(app, "LifePilotFoundationStack", {
   },
 });
 
-new CostGuardStack(app, "LifePilotCostGuardStack", {
-  env: {
-    account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: process.env.CDK_DEFAULT_REGION || "eu-central-1",
-  },
-});
+if (process.env.LIFEPILOT_BUDGET_EMAIL) {
+  new CostGuardStack(app, "LifePilotCostGuardStack", {
+    env: {
+      account: process.env.CDK_DEFAULT_ACCOUNT,
+      region: process.env.CDK_DEFAULT_REGION || "eu-central-1",
+    },
+  });
+}

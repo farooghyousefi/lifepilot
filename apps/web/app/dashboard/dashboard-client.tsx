@@ -16,13 +16,17 @@ import {
   Upload,
   type LucideIcon,
 } from "lucide-react";
-import type { ContractRecord, DocumentAnalysis, Reminder } from "@lifepilot/shared";
+import type {
+  ContractRecord,
+  DocumentAnalysis,
+  ReminderRecord,
+} from "@lifepilot/shared";
 
+import { readStoredDocumentAnalyses } from "../../src/services/documents";
 import {
-  readStoredDocumentAnalyses,
-} from "../../src/services/documents";
-import { listContractRecords, listMissingFacts } from "../../src/services/knowledge";
-import { readStoredReminders } from "../../src/services/reminders";
+  listPersistedContracts,
+  listPersistedReminders,
+} from "../../src/services/memory";
 import {
   LifePilotShell,
   PageHeader,
@@ -30,9 +34,6 @@ import {
   type Accent,
 } from "./dashboard-ui";
 import { DocumentIntelligenceSummary } from "./document-intelligence-summary";
-
-const localDevMessage =
-  "Lokaler Dev-Modus: Dokumentanalyse, Vertragsdaten und Erinnerungen werden aktuell im Browser gespeichert.";
 
 const quickActions: Array<{
   description: string;
@@ -100,17 +101,43 @@ const lifePilotLoop = [
 export function DashboardClient() {
   const [analyses, setAnalyses] = useState<DocumentAnalysis[]>([]);
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [reminders, setReminders] = useState<ReminderRecord[]>([]);
+  const [persistenceMessage, setPersistenceMessage] = useState(
+    "Backend-Speicherung vorbereitet, aber noch nicht deployed.",
+  );
 
   useEffect(() => {
     setAnalyses(readStoredDocumentAnalyses());
-    setContracts(listContractRecords());
-    setReminders(readStoredReminders());
+
+    async function loadMemory() {
+      const [contractResult, reminderResult] = await Promise.all([
+        listPersistedContracts(),
+        listPersistedReminders(),
+      ]);
+
+      setContracts(contractResult.data);
+      setReminders(reminderResult.data);
+      setPersistenceMessage(
+        contractResult.status === "backend-saved" ||
+          reminderResult.status === "backend-saved"
+          ? "Backend-Speicherung aktiv."
+          : contractResult.message,
+      );
+    }
+
+    void loadMemory();
   }, []);
 
   const openReminders = useMemo(
-    () => reminders.filter((reminder) => !reminder.completed),
+    () => reminders.filter((reminder) => reminder.status !== "done"),
     [reminders],
+  );
+  const overdueReminders = useMemo(
+    () =>
+      openReminders.filter(
+        (reminder) => startOfDay(new Date(reminder.dueDate)) < startOfDay(new Date()),
+      ),
+    [openReminders],
   );
 
   const documentsForReview = useMemo(
@@ -123,7 +150,16 @@ export function DashboardClient() {
       ),
     [analyses],
   );
-  const missingFacts = useMemo(() => listMissingFacts(), []);
+  const missingFacts = useMemo(
+    () =>
+      contracts.flatMap((contract) =>
+        contract.missingFacts.map((missingFact) => ({
+          contract,
+          missingFact,
+        })),
+      ),
+    [contracts],
+  );
   const cancellationSoonContracts = useMemo(
     () =>
       contracts.filter(
@@ -194,12 +230,12 @@ export function DashboardClient() {
           </div>
           <div>
             <p className="text-[15px] font-bold text-[#101828]">
-              {localDevMessage}
+              {persistenceMessage}
             </p>
             <p className="mt-1 text-[13px] font-semibold leading-6 text-[#667085]">
               Das ist bewusst ehrlich: produktive Speicherung,
               geräteübergreifende Synchronisierung und sichere Reminder im
-              Backend brauchen noch AWS Deployment.
+              Backend brauchen ein AWS Deployment und Live-Validierung.
             </p>
           </div>
         </div>
@@ -243,6 +279,69 @@ export function DashboardClient() {
       </section>
 
       <DocumentIntelligenceSummary />
+
+      {contracts.length === 0 && reminders.length === 0 ? (
+        <section className="mt-7 rounded-[22px] border border-[#ECEFEB] bg-white p-6 shadow-card">
+          <p className="text-[16px] font-bold text-[#101828]">
+            Noch keine gespeicherten Verträge oder Erinnerungen. Lade ein
+            Dokument hoch oder erstelle eine Erinnerung manuell.
+          </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <Link
+              className="inline-flex justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white"
+              href="/documents"
+            >
+              Dokument hochladen
+            </Link>
+            <Link
+              className="inline-flex justify-center rounded-xl border border-[#ECEFEB] bg-white px-4 py-3 text-[13px] font-bold text-[#344054]"
+              href="/reminders"
+            >
+              Erinnerung erstellen
+            </Link>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="mt-7 grid gap-5 xl:grid-cols-2">
+        <CommandPanel
+          icon={Bell}
+          title="Nächste Fristen & Erinnerungen"
+          tone="orange"
+        >
+          {openReminders.length > 0 ? (
+            openReminders.slice(0, 3).map((reminder) => (
+              <StatusRow
+                key={reminder.id}
+                meta={formatReminderMeta(reminder)}
+                title={reminder.title}
+              />
+            ))
+          ) : (
+            <EmptyState text="Noch keine offenen Erinnerungen." />
+          )}
+          <Link
+            className="mt-4 inline-flex items-center justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866]"
+            href="/reminders"
+          >
+            Erinnerungen öffnen
+          </Link>
+        </CommandPanel>
+
+        <CommandPanel icon={AlertTriangle} title="Überfällig" tone="orange">
+          {overdueReminders.length > 0 ? (
+            overdueReminders.slice(0, 3).map((reminder) => (
+              <StatusRow
+                key={reminder.id}
+                meta={formatReminderMeta(reminder)}
+                title={reminder.title}
+              />
+            ))
+          ) : (
+            <EmptyState text="Keine überfälligen Erinnerungen." />
+          )}
+        </CommandPanel>
+      </section>
 
       <section className="mt-7 grid gap-5 xl:grid-cols-[1fr_0.9fr]">
         <CommandPanel
@@ -446,6 +545,16 @@ function StatusRow({ meta, title }: { meta: string; title: string }) {
   );
 }
 
+function formatReminderMeta(reminder: ReminderRecord): string {
+  const dueDate = new Date(reminder.dueDate).toLocaleDateString("de-DE");
+
+  return reminder.reminderDate
+    ? `Fällig am ${dueDate}. Erinnerung am ${new Date(
+        reminder.reminderDate,
+      ).toLocaleDateString("de-DE")}.`
+    : `Fällig am ${dueDate}.`;
+}
+
 function EmptyState({ text }: { text: string }) {
   return (
     <div className="py-4 first:pt-1 last:pb-1">
@@ -508,4 +617,10 @@ function formatAnalysisMeta(analysis: DocumentAnalysis): string {
   }
 
   return "Keine offene Prüfung.";
+}
+
+function startOfDay(date: Date): Date {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
 }

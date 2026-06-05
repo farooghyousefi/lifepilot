@@ -6,7 +6,7 @@ LifePilot is not positioned as "another AI app". It helps normal non-technical p
 
 This repository must not contain API keys, secrets, real user data, or real private documents.
 
-## Current Milestone: Document Knowledge Base + Contract Brain MVP
+## Current Milestone: LifePilot Memory Core MVP
 
 The web app now focuses on the real LifePilot loop:
 
@@ -18,6 +18,12 @@ The web app now focuses on the real LifePilot loop:
 
 What works now:
 
+- Backend persistence is prepared for user-scoped contracts and reminders through API Gateway, Lambda, and DynamoDB code.
+- CDK now wires real packaged Contracts and Reminders Lambda handlers instead of inline placeholders for those domains.
+- Prepared contract routes: `GET /contracts`, `POST /contracts`, `GET /contracts/{contractId}`, `PATCH /contracts/{contractId}`, `DELETE /contracts/{contractId}`.
+- Prepared reminder routes: `GET /reminders`, `POST /reminders`, `GET /reminders/{reminderId}`, `PATCH /reminders/{reminderId}`, `DELETE /reminders/{reminderId}`.
+- Contracts and reminders are scoped by Cognito `claims.sub` in backend handlers. Frontend-provided `userId` is ignored.
+- The web app has a `LifePilotMemoryService` that tries backend persistence when configured and falls back to clearly labeled local/dev browser storage if the backend is unavailable.
 - `/documents` supports document upload metadata and the presigned S3 upload architecture.
 - TXT files can be read locally in the browser.
 - RTF-like raw markup is not shown as normal extracted text.
@@ -45,9 +51,13 @@ Local/dev scope:
 - Confirmed reminders are stored in browser `localStorage` for the current device.
 - If the backend is unavailable, `/documents` can still create a clearly labeled local/dev analysis item.
 - Local/dev analysis, contract records, action drafts, offer comparison intents, and reminders are not production storage and are not cross-device sync.
+- Until AWS is deployed and validated, the visible app can still show: "Entwicklungsmodus: Daten werden aktuell lokal im Browser gespeichert."
+- If backend mode is configured but unavailable, the UI shows: "Backend-Speicherung vorbereitet, aber noch nicht deployed."
 
 Still requires AWS deployment:
 
+- Live validation of the new Contracts and Reminders Lambda handlers against deployed DynamoDB tables.
+- Production migration from browser-local Contract Brain records to user-scoped DynamoDB records.
 - Private S3 upload validation in the deployed environment.
 - Persistent document metadata and upload status in DynamoDB.
 - User-scoped document storage in S3.
@@ -57,18 +67,16 @@ Still requires AWS deployment:
 
 Next milestones:
 
-1. Real PDF text extraction.
-2. Photo OCR for letters.
-3. Backend persistence for documents/contracts/reminders/action drafts.
-4. AI structured extraction with source evidence.
-5. Contract Cockpit production version.
-6. Offer comparison integration.
-7. Calendar integration.
-8. Email import and email draft creation.
-9. Banking/finance aggregation.
-10. Mobile camera app.
-11. Subscription system.
-12. Privacy/security hardening.
+1. AWS deploy and live DynamoDB validation.
+2. Document Detail Page.
+3. Real PDF text extraction.
+4. OCR for photos/letters.
+5. AI document explanation.
+6. Calendar export / ICS.
+7. Google Calendar integration.
+8. Email import.
+9. Subscription system.
+10. Mobile capture app.
 
 ## Stack
 
@@ -182,6 +190,30 @@ Important boundaries:
 - Cancellation drafts are only drafts.
 - Offer comparison is only planned metadata.
 - No automatic cancellation, email sending, banking call, comparison portal call, or external AI call happens in this milestone.
+
+## LifePilot Memory Core MVP
+
+The Memory Core sprint prepares the move from device-local demo state to real SaaS persistence.
+
+Prepared AWS design:
+
+- `ContractsTable`: partition key `userId`, sort key `contractId`.
+- `RemindersTable`: partition key `userId`, sort key `reminderId`.
+- Both tables use `PAY_PER_REQUEST`.
+- Records are always scoped by Cognito user id from API Gateway authorizer claims.
+- No frontend-provided `userId` is trusted.
+- Reminder items also store `dueDate` and `status` attributes to support upcoming reminder queries later.
+
+Prepared backend APIs:
+
+- Contracts: `GET`, `POST`, `GET by id`, `PATCH`, `DELETE`.
+- Reminders: `GET`, `POST`, `GET by id`, `PATCH`, `DELETE`.
+
+Local test notes:
+
+- Keep `NEXT_PUBLIC_USE_MOCKS=true` for normal local fallback.
+- Set `NEXT_PUBLIC_USE_MOCKS=false` with a deployed `NEXT_PUBLIC_API_BASE_URL` only when the API is actually available.
+- If backend mode fails locally, LifePilot falls back and shows that data is currently stored in the browser.
 
 ## Getting Started
 

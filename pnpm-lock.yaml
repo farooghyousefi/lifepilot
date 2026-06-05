@@ -121,6 +121,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1060.0
         version: 3.1060.0
+      '@lifepilot/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       aws-cdk-lib:
         specifier: ^2.173.2
         version: 2.257.0(constructs@10.6.0)

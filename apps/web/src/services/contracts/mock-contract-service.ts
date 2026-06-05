@@ -1,51 +1,54 @@
-import {
-  calculateContractSummary,
-  createLifePilotClient,
-  getMockContracts,
-} from "@lifepilot/api-client";
+import { createLifePilotClient, getMockContracts } from "@lifepilot/api-client";
 import type {
-  Contract,
+  ContractRecord,
+  ContractRecordCreateInput,
   ContractSummary,
-  CreateContractInput,
 } from "@lifepilot/shared";
 import type { ContractService } from "./contract-service";
 
 export class MockContractService implements ContractService {
-  private contracts: Contract[] = getMockContracts();
   private readonly mockClient = createLifePilotClient({ useMockData: true });
 
-  async listContracts(): Promise<Contract[]> {
-    return this.contracts.map((contract) => ({ ...contract }));
+  async listContracts(): Promise<ContractRecord[]> {
+    const result = await this.mockClient.listContracts();
+
+    return result.data;
   }
 
-  async createContract(input: CreateContractInput): Promise<Contract> {
+  async createContract(input: ContractRecordCreateInput): Promise<ContractRecord> {
     const result = await this.mockClient.createContract(input);
-    const contract = result.data;
 
-    this.contracts = [contract, ...this.contracts];
-
-    return { ...contract };
+    return result.data;
   }
 
-  async getContract(contractId: string): Promise<Contract | null> {
-    const contract =
-      this.contracts.find((item) => item.contractId === contractId) ?? null;
+  async getContract(contractId: string): Promise<ContractRecord | null> {
+    const result = await this.mockClient.getContract(contractId);
 
-    return contract ? { ...contract } : null;
+    return result.data;
   }
 
   async deleteContract(contractId: string): Promise<boolean> {
-    const initialLength = this.contracts.length;
+    const result = await this.mockClient.deleteContract(contractId);
 
-    this.contracts = this.contracts.filter(
-      (contract) => contract.contractId !== contractId,
-    );
-
-    return this.contracts.length !== initialLength;
+    return result.data.deleted;
   }
 
-  getSummary(contracts: Contract[]): ContractSummary {
-    return calculateContractSummary(contracts);
+  getSummary(contracts: ContractRecord[]): ContractSummary {
+    return {
+      activeContracts: contracts.length,
+      annualSavingsPotential: getMockContracts().reduce(
+        (total, contract) => total + contract.annualSavingsPotential,
+        0,
+      ),
+      criticalDeadlines: contracts.filter(
+        (contract) =>
+          contract.lifecycleStatus === "cancellable-now" ||
+          contract.lifecycleStatus === "cancellation-window-upcoming",
+      ).length,
+      monthlyFixedCosts: contracts.reduce(
+        (total, contract) => total + (contract.cost.amount ?? 0),
+        0,
+      ),
+    };
   }
 }
-

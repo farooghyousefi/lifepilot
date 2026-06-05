@@ -4,7 +4,6 @@ import {
   confirmResetPassword,
   confirmSignUp,
   fetchAuthSession,
-  fetchUserAttributes,
   getCurrentUser,
   resendSignUpCode,
   resetPassword,
@@ -28,6 +27,9 @@ import type {
 } from "./auth-service";
 
 let amplifyConfigured = false;
+let cachedSession: AuthSession | null = null;
+let cachedSessionAt = 0;
+const sessionCacheMs = 5 * 60 * 1000;
 
 function configureAmplify() {
   if (amplifyConfigured) {
@@ -174,25 +176,34 @@ export class CognitoAuthService implements AuthService {
 
   async signOut(): Promise<void> {
     await signOut();
+    cachedSession = null;
+    cachedSessionAt = 0;
     clearAuthToken();
   }
 
   async getCurrentSession(): Promise<AuthSession | null> {
+    if (isCachedSessionUsable()) {
+      if (cachedSession?.accessToken) {
+        setAuthToken(cachedSession.accessToken);
+      }
+
+      return cachedSession;
+    }
+
     try {
       const currentUser = await getCurrentUser();
       const session = await fetchAuthSession();
-      const attributes = await fetchUserAttributes().catch(
-        () => ({}) as Record<string, string>,
-      );
-      const accessToken = session.tokens?.accessToken?.toString() ?? "";
+      const accessToken =
+        session.tokens?.idToken?.toString() ??
+        session.tokens?.accessToken?.toString() ??
+        "";
       const email =
-        attributes.email ??
         currentUser.signInDetails?.loginId ??
         currentUser.username;
 
       setAuthToken(accessToken);
 
-      return {
+      const authSession: AuthSession = {
         accessToken,
         expiresAt: session.tokens?.accessToken?.payload.exp
           ? new Date(
@@ -200,9 +211,16 @@ export class CognitoAuthService implements AuthService {
             ).toISOString()
           : undefined,
         provider: "cognito",
-        user: createUserFromEmail(email, currentUser.userId, attributes.name),
+        user: createUserFromEmail(email, currentUser.userId),
       };
+
+      cachedSession = authSession;
+      cachedSessionAt = Date.now();
+
+      return authSession;
     } catch {
+      cachedSession = null;
+      cachedSessionAt = 0;
       clearAuthToken();
       return null;
     }
@@ -217,4 +235,20 @@ export class CognitoAuthService implements AuthService {
     const user = await this.getCurrentUser();
     return Boolean(user);
   }
+}
+
+function isCachedSessionUsable(): boolean {
+  if (!cachedSession) {
+    return false;
+  }
+
+  if (Date.now() - cachedSessionAt > sessionCacheMs) {
+    return false;
+  }
+
+  if (!cachedSession.expiresAt) {
+    return true;
+  }
+
+  return new Date(cachedSession.expiresAt).getTime() > Date.now() + 60_000;
 }
