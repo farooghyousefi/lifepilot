@@ -1,12 +1,16 @@
 import type {
   ApiResult,
   AuthSession,
+  CompleteDocumentUploadResult,
   Contract,
   ContractSummary,
+  CompleteDocumentUploadInput,
   CreateContractInput,
   CreateDocumentInput,
   Document,
   LifePilotSnapshot,
+  RequestDocumentUploadInput,
+  RequestDocumentUploadResult,
   VaultItem,
 } from "@lifepilot/shared";
 
@@ -209,11 +213,15 @@ const mockVaultItems: VaultItem[] = [
   },
 ];
 
+const mockRuntimeDocuments: Document[] = [];
+
 export const getMockContracts = (): Contract[] =>
   mockContracts.map((contract) => ({ ...contract }));
 
 export const getMockDocuments = (): Document[] =>
-  mockDocuments.map((document) => ({ ...document }));
+  [...mockRuntimeDocuments, ...mockDocuments].map((document) => ({
+    ...document,
+  }));
 
 export const getMockVaultItems = (): VaultItem[] =>
   mockVaultItems.map((item) => ({ ...item }));
@@ -222,7 +230,7 @@ const getMockContractById = (contractId: string): Contract | undefined =>
   mockContracts.find((contract) => contract.contractId === contractId);
 
 const getMockDocumentById = (documentId: string): Document | undefined =>
-  mockDocuments.find((document) => document.id === documentId);
+  getMockDocuments().find((document) => document.id === documentId);
 
 const createMockContract = (input: CreateContractInput): Contract => {
   const contractId = `contract-${Date.now()}`;
@@ -250,18 +258,75 @@ const createMockContract = (input: CreateContractInput): Contract => {
 const createMockDocument = (input: CreateDocumentInput): Document => {
   const documentId = `document-${Date.now()}`;
 
-  return {
+  const document: Document = {
     id: documentId,
     name: input.name,
     category: input.category,
     status: input.status,
     addedAt: new Date().toISOString(),
     notes: input.notes,
-    securityNote: "Demo mode: no real file was uploaded or stored.",
-    recommendedAction: "Review this demo item before connecting real storage.",
+    uploadStatus: "metadata-only",
+    securityNote: "Metadata-only mock document. No file is attached.",
+    recommendedAction: "Review this document and attach a file when needed.",
+  };
+
+  mockRuntimeDocuments.unshift(document);
+
+  return document;
+};
+
+const createMockUploadRequest = (
+  input: RequestDocumentUploadInput,
+): RequestDocumentUploadResult => {
+  const documentId = `document-upload-${Date.now()}`;
+  const safeFileName = input.fileName.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const document: Document = {
+    id: documentId,
+    name: input.name,
+    category: input.category,
+    status: input.status,
+    addedAt: new Date().toISOString(),
+    notes: input.notes,
+    fileName: input.fileName,
+    contentType: input.contentType,
+    sizeBytes: input.sizeBytes,
+    s3Key: `mock/users/mock-user/documents/${documentId}/${safeFileName}`,
+    uploadStatus: "upload-pending",
+    securityNote:
+      "Mock upload request created. Real mode uploads directly to private S3.",
+    recommendedAction: "Complete the mock upload flow and review the document.",
+  };
+
+  mockRuntimeDocuments.unshift(document);
+
+  return {
+    document,
+    uploadHeaders: {
+      "content-type": input.contentType,
+    },
+    uploadUrl: `mock://documents/${documentId}/${safeFileName}`,
   };
 };
 
+const completeMockDocumentUpload = (
+  input: CompleteDocumentUploadInput,
+): CompleteDocumentUploadResult => {
+  const document = mockRuntimeDocuments.find(
+    (item) => item.id === input.documentId,
+  );
+
+  if (!document) {
+    throw new Error("Mock document upload could not be completed.");
+  }
+
+  document.uploadStatus = "uploaded";
+  document.securityNote =
+    "Mock upload completed. Real mode stores the file in private S3.";
+  document.recommendedAction =
+    "Review this uploaded document and link it to the right record.";
+
+  return { document: { ...document } };
+};
 export const calculateContractSummary = (
   contracts: Contract[],
 ): ContractSummary => ({
@@ -515,7 +580,62 @@ export class LifePilotApiClient {
 
     return response.json() as Promise<ApiResult<Document>>;
   }
+  async requestDocumentUpload(
+    input: RequestDocumentUploadInput,
+  ): Promise<ApiResult<RequestDocumentUploadResult>> {
+    if (this.useMockData) {
+      return {
+        data: createMockUploadRequest(input),
+        requestId: "mock-documents-upload-url",
+        source: "mock",
+      };
+    }
 
+    const response = await fetch(`${this.baseUrl}/documents/upload-url`, {
+      body: JSON.stringify(input),
+      headers: {
+        ...this.getAuthHeaders(),
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<ApiResult<RequestDocumentUploadResult>>;
+  }
+
+  async completeDocumentUpload(
+    documentId: string,
+  ): Promise<ApiResult<CompleteDocumentUploadResult>> {
+    if (this.useMockData) {
+      return {
+        data: completeMockDocumentUpload({ documentId }),
+        requestId: "mock-documents-upload-complete",
+        source: "mock",
+      };
+    }
+
+    const response = await fetch(
+      `${this.baseUrl}/documents/${documentId}/complete`,
+      {
+        body: JSON.stringify({ documentId }),
+        headers: {
+          ...this.getAuthHeaders(),
+          "content-type": "application/json",
+        },
+        method: "POST",
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Life Pilot API request failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<ApiResult<CompleteDocumentUploadResult>>;
+  }
   async deleteDocument(
     documentId: string,
   ): Promise<ApiResult<{ deleted: boolean; documentId: string }>> {
@@ -626,6 +746,17 @@ export const createDocument = (
   options?: LifePilotClientOptions,
 ): Promise<ApiResult<Document>> =>
   createLifePilotClient(options).createDocument(input);
+export const requestDocumentUpload = (
+  input: RequestDocumentUploadInput,
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<RequestDocumentUploadResult>> =>
+  createLifePilotClient(options).requestDocumentUpload(input);
+
+export const completeDocumentUpload = (
+  documentId: string,
+  options?: LifePilotClientOptions,
+): Promise<ApiResult<CompleteDocumentUploadResult>> =>
+  createLifePilotClient(options).completeDocumentUpload(documentId);
 
 export const deleteDocument = (
   documentId: string,

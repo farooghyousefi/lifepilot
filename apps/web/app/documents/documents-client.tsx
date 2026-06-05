@@ -21,6 +21,7 @@ import type {
   Document as LifePilotDocument,
   DocumentCategory,
   DocumentStatus,
+  RequestDocumentUploadInput,
 } from "@lifepilot/shared";
 
 import {
@@ -58,6 +59,16 @@ const statusLabels: Record<DocumentStatus, string> = {
   "linked-to-contract": "Linked to contract",
   "needs-review": "Needs review",
   protected: "Protected",
+};
+
+const uploadStatusLabels: Record<
+  NonNullable<LifePilotDocument["uploadStatus"]>,
+  string
+> = {
+  failed: "Failed",
+  "metadata-only": "Metadata only",
+  "upload-pending": "Upload pending",
+  uploaded: "Uploaded",
 };
 
 const statusStyles: Record<
@@ -131,6 +142,15 @@ const emptyForm: CreateDocumentInput = {
   notes: "",
   status: "protected",
 };
+
+const allowedFileTypes = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "text/plain",
+]);
+const maxFileSizeBytes = 5 * 1024 * 1024;
+
 async function attachCognitoToken() {
   const session = await fetchAuthSession();
 
@@ -155,33 +175,36 @@ export function DocumentsClient() {
   const [isMobileDetailOpen, setIsMobileDetailOpen] = useState(false);
   const [form, setForm] = useState<CreateDocumentInput>(emptyForm);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-  let isMounted = true;
+    let isMounted = true;
 
-  async function loadDocuments() {
-    await attachCognitoToken();
+    async function loadDocuments() {
+      await attachCognitoToken();
 
-    const result = await documentClient.listDocuments();
+      const result = await documentClient.listDocuments();
 
-    if (!isMounted) {
-      return;
+      if (!isMounted) {
+        return;
+      }
+
+      const loadedDocuments = Array.isArray(result.data) ? result.data : [];
+
+      setDocuments(loadedDocuments);
+      setSelectedDocument(loadedDocuments[0] ?? null);
     }
 
-    const loadedDocuments = Array.isArray(result.data) ? result.data : [];
+    loadDocuments().catch((error) => {
+      console.error("Failed to load documents", error);
+    });
 
-    setDocuments(loadedDocuments);
-    setSelectedDocument(loadedDocuments[0] ?? null);
-  }
-
-  loadDocuments().catch((error) => {
-    console.error("Failed to load documents", error);
-  });
-
-  return () => {
-    isMounted = false;
-  };
-}, []);
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filteredDocuments = useMemo(
     () =>
@@ -193,24 +216,73 @@ export function DocumentsClient() {
 
   const saveDocument = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setUploadError(null);
+    setSuccessMessage(null);
 
     if (!form.name.trim()) {
+      setUploadError("Please enter a document name.");
       return;
     }
-    await attachCognitoToken();
-    const result = await documentClient.createDocument({
-      ...form,
-      name: form.name.trim(),
-      notes: form.notes?.trim() || undefined,
-    });
 
-    setDocuments((current) => [result.data, ...current]);
-    setSelectedDocument(result.data);
-    setForm(emptyForm);
-    setIsUploadOpen(false);
-    setSuccessMessage(
-      "Document metadata saved. No real file was uploaded.",
-    );
+    if (!selectedFile) {
+      setUploadError("Please choose a file to upload.");
+      return;
+    }
+
+    if (!allowedFileTypes.has(selectedFile.type)) {
+      setUploadError("Only PDF, PNG, JPG/JPEG and TXT files are supported.");
+      return;
+    }
+
+    if (selectedFile.size > maxFileSizeBytes) {
+      setUploadError("File size must be 5 MB or less.");
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      await attachCognitoToken();
+
+      const uploadInput: RequestDocumentUploadInput = {
+        ...form,
+        contentType: selectedFile.type,
+        fileName: selectedFile.name,
+        name: form.name.trim(),
+        notes: form.notes?.trim() || undefined,
+        sizeBytes: selectedFile.size,
+      };
+      const uploadRequest =
+        await documentClient.requestDocumentUpload(uploadInput);
+
+      await uploadFileToSignedUrl({
+        file: selectedFile,
+        uploadHeaders: uploadRequest.data.uploadHeaders,
+        uploadUrl: uploadRequest.data.uploadUrl,
+      });
+
+      const completedUpload =
+        await documentClient.completeDocumentUpload(
+          uploadRequest.data.document.id,
+        );
+      const uploadedDocument = completedUpload.data.document;
+
+      setDocuments((current) => [uploadedDocument, ...current]);
+      setSelectedDocument(uploadedDocument);
+      setForm(emptyForm);
+      setSelectedFile(null);
+      setIsUploadOpen(false);
+      setSuccessMessage(
+        "Document uploaded to private S3 storage and saved to your account.",
+      );
+    } catch (error) {
+      console.error("Failed to upload document", error);
+      setUploadError(
+        "Upload failed. Please check the file and try again.",
+      );
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const selectDocument = (document: LifePilotDocument) => {
@@ -255,7 +327,7 @@ export function DocumentsClient() {
                 Document library
               </h2>
               <p className="mt-1 text-[13px] font-semibold text-[#667085]">
-                Metadata is stored for your signed-in account. No real files are uploaded yet.
+                Files are uploaded directly to private S3 storage.
               </p>
             </div>
             <button
@@ -309,9 +381,21 @@ export function DocumentsClient() {
       {isUploadOpen ? (
         <UploadDialog
           form={form}
+          isUploading={isUploading}
           onChange={setForm}
-          onClose={() => setIsUploadOpen(false)}
+          onClose={() => {
+            if (isUploading) {
+              return;
+            }
+
+            setIsUploadOpen(false);
+            setSelectedFile(null);
+            setUploadError(null);
+          }}
+          onFileChange={setSelectedFile}
           onSubmit={saveDocument}
+          selectedFile={selectedFile}
+          uploadError={uploadError}
         />
       ) : null}
 
@@ -436,6 +520,30 @@ function DocumentDetailPanel({
           label="Linked contract"
           value={document.linkedContract ?? "Not linked yet"}
         />
+        <DetailRow
+          label="Upload status"
+          value={
+            uploadStatusLabels[document.uploadStatus ?? "metadata-only"] ??
+            "Metadata only"
+          }
+        />
+        <DetailRow
+          label="File name"
+          value={document.fileName ?? "No file attached"}
+        />
+        <DetailRow
+          label="File size"
+          value={
+            typeof document.sizeBytes === "number"
+              ? formatFileSize(document.sizeBytes)
+              : "Not available"
+          }
+        />
+        <DetailRow
+          label="Content type"
+          value={document.contentType ?? "Not available"}
+        />
+        <DetailRow label="S3 key" value={document.s3Key ?? "Not available"} />
       </div>
 
       <div className="mt-6 rounded-[18px] bg-[#F2FAF6] p-4">
@@ -484,14 +592,22 @@ function DocumentDetailPanel({
 
 function UploadDialog({
   form,
+  isUploading,
   onChange,
   onClose,
+  onFileChange,
   onSubmit,
+  selectedFile,
+  uploadError,
 }: {
   form: CreateDocumentInput;
+  isUploading: boolean;
   onChange: (form: CreateDocumentInput) => void;
   onClose: () => void;
+  onFileChange: (file: File | null) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  selectedFile: File | null;
+  uploadError: string | null;
 }) {
   const updateForm = <Key extends keyof CreateDocumentInput>(
     key: Key,
@@ -515,12 +631,13 @@ function UploadDialog({
               Upload document
             </h2>
             <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
-              No file upload yet: only document metadata will be saved.
+              Files are uploaded directly to private S3 storage.
             </p>
           </div>
           <button
             aria-label="Close upload dialog"
             className="flex size-10 items-center justify-center rounded-xl bg-[#FCFBFA] text-[#667085]"
+            disabled={isUploading}
             onClick={onClose}
             type="button"
           >
@@ -529,6 +646,12 @@ function UploadDialog({
         </div>
 
         <div className="mt-6 space-y-4">
+          {uploadError ? (
+            <div className="rounded-[18px] border border-[#FBE3DF] bg-[#FFF3F1] px-4 py-3 text-[13px] font-bold text-[#E14C45]">
+              {uploadError}
+            </div>
+          ) : null}
+
           <label className="block">
             <span className="text-[13px] font-bold text-[#344054]">
               Document name
@@ -587,10 +710,35 @@ function UploadDialog({
 
           <label className="block">
             <span className="text-[13px] font-bold text-[#344054]">
+              File
+            </span>
+            <input
+              accept=".pdf,.png,.jpg,.jpeg,.txt,application/pdf,image/png,image/jpeg,text/plain"
+              className="mt-2 w-full rounded-xl border border-dashed border-[#B9DEC7] bg-[#F2FAF6] px-4 py-4 text-[13px] font-bold text-[#344054] file:mr-4 file:rounded-xl file:border-0 file:bg-white file:px-4 file:py-2 file:text-[13px] file:font-bold file:text-[#2FA779]"
+              disabled={isUploading}
+              onChange={(event) =>
+                onFileChange(event.target.files?.[0] ?? null)
+              }
+              required
+              type="file"
+            />
+            <p className="mt-2 text-[12px] font-semibold leading-5 text-[#667085]">
+              PDF, PNG, JPG/JPEG or TXT. Maximum size: 5 MB.
+            </p>
+            {selectedFile ? (
+              <div className="mt-3 rounded-[16px] border border-[#DDEFE6] bg-[#F8FCFA] px-4 py-3 text-[13px] font-semibold text-[#344054]">
+                {selectedFile.name} · {formatFileSize(selectedFile.size)}
+              </div>
+            ) : null}
+          </label>
+
+          <label className="block">
+            <span className="text-[13px] font-bold text-[#344054]">
               Notes
             </span>
             <textarea
               className="mt-2 min-h-28 w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[14px] font-semibold text-[#101828] outline-none transition placeholder:text-[#98A2B3] focus:border-[#B9DEC7] focus:bg-white"
+              disabled={isUploading}
               onChange={(event) => updateForm("notes", event.target.value)}
               placeholder="Short demo note..."
               value={form.notes}
@@ -599,11 +747,12 @@ function UploadDialog({
         </div>
 
         <button
-          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#2FA779] px-4 py-3 text-[14px] font-bold text-white shadow-button transition hover:bg-[#258866]"
+          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#2FA779] px-4 py-3 text-[14px] font-bold text-white shadow-button transition hover:bg-[#258866] disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isUploading}
           type="submit"
         >
           <Plus className="size-4" aria-hidden="true" />
-          Save demo document
+          {isUploading ? "Uploading..." : "Upload document"}
         </button>
       </form>
     </div>
@@ -629,7 +778,45 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-[#98A2B3]">
         {label}
       </p>
-      <p className="mt-2 text-[14px] font-bold text-[#101828]">{value}</p>
+      <p className="mt-2 break-words text-[14px] font-bold text-[#101828]">
+        {value}
+      </p>
     </div>
   );
+}
+
+async function uploadFileToSignedUrl({
+  file,
+  uploadHeaders,
+  uploadUrl,
+}: {
+  file: File;
+  uploadHeaders: Record<string, string>;
+  uploadUrl: string;
+}): Promise<void> {
+  if (uploadUrl.startsWith("mock://")) {
+    return;
+  }
+
+  const response = await fetch(uploadUrl, {
+    body: file,
+    headers: uploadHeaders,
+    method: "PUT",
+  });
+
+  if (!response.ok) {
+    throw new Error(`S3 upload failed: ${response.status}`);
+  }
+}
+
+function formatFileSize(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
 }

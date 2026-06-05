@@ -47,6 +47,12 @@ export type DocumentStatus =
   | "linked-to-contract"
   | "expiring-soon";
 
+export type DocumentUploadStatus =
+  | "metadata-only"
+  | "upload-pending"
+  | "uploaded"
+  | "failed";
+
 export interface LifeGoal {
   id: string;
   title: string;
@@ -97,6 +103,11 @@ export interface Document {
   securityNote: string;
   recommendedAction: string;
   notes?: string;
+  fileName?: string;
+  contentType?: string;
+  sizeBytes?: number;
+  s3Key?: string;
+  uploadStatus?: DocumentUploadStatus;
 }
 
 export interface CreateDocumentInput {
@@ -104,6 +115,33 @@ export interface CreateDocumentInput {
   category: DocumentCategory;
   status: DocumentStatus;
   notes?: string;
+  fileName?: string;
+  contentType?: string;
+  sizeBytes?: number;
+}
+
+export interface RequestDocumentUploadInput {
+  name: string;
+  category: DocumentCategory;
+  status: DocumentStatus;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  notes?: string;
+}
+
+export interface RequestDocumentUploadResult {
+  document: Document;
+  uploadHeaders: Record<string, string>;
+  uploadUrl: string;
+}
+
+export interface CompleteDocumentUploadInput {
+  documentId: string;
+}
+
+export interface CompleteDocumentUploadResult {
+  document: Document;
 }
 
 export interface VaultItem {
