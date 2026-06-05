@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
-  CalendarClock,
   CheckCircle2,
   Clipboard,
   CreditCard,
@@ -17,14 +16,12 @@ import {
 import type {
   ContractCategory,
   ContractRecord,
-  RequiredFactKey,
 } from "@lifepilot/shared";
 
 import {
   correctFact,
   createCancellationDraft,
   createOfferComparisonIntent,
-  factLabels,
   listContractRecords,
   markActionDraftPrepared,
   updateActionDraftBody,

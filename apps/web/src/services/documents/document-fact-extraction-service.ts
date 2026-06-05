@@ -120,7 +120,7 @@ function detectProvider(
   facts: Partial<Record<RequiredFactKey, DocumentFact>>,
 ): void {
   const explicitMatch = text.match(
-    /\b(?:Anbieter|Unternehmen|Vertragspartner|Vermieter|Behörde|Behoerde)\s*[:\-]\s*([A-ZÄÖÜ][\wÄÖÜäöüß&.\- ]{2,60})/u,
+    /\b(?:Anbieter|Unternehmen|Vertragspartner|Vermieter|Behörde|Behoerde)\s*[:-]\s*([A-ZÄÖÜ][\wÄÖÜäöüß&. -]{2,60})/u,
   );
 
   if (explicitMatch?.[1]) {
@@ -164,11 +164,11 @@ function detectIdentifiers(
   facts: Partial<Record<RequiredFactKey, DocumentFact>>,
 ): void {
   const patterns: Array<{ key: RequiredFactKey; pattern: RegExp }> = [
-    { key: "customerNumber", pattern: /\b(?:Kundennummer|Kunden-Nr\.?|Kundennr\.?)\s*[:\-]?\s*([A-Z0-9\-./]{4,})/iu },
-    { key: "contractNumber", pattern: /\b(?:Vertragsnummer|Vertrag Nr\.?)\s*[:\-]?\s*([A-Z0-9\-./]{4,})/iu },
-    { key: "invoiceNumber", pattern: /\b(?:Rechnungsnummer|Rechnung Nr\.?)\s*[:\-]?\s*([A-Z0-9\-./]{4,})/iu },
-    { key: "fileNumber", pattern: /\b(?:Aktenzeichen|Geschäftszeichen|Geschaeftszeichen)\s*[:\-]?\s*([A-Z0-9\-./]{4,})/iu },
-    { key: "policyNumber", pattern: /\b(?:Versicherungsnummer|Policennummer|Police Nr\.?)\s*[:\-]?\s*([A-Z0-9\-./]{4,})/iu },
+    { key: "customerNumber", pattern: /\b(?:Kundennummer|Kunden-Nr\.?|Kundennr\.?)\s*[:-]?\s*([A-Z0-9./-]{4,})/iu },
+    { key: "contractNumber", pattern: /\b(?:Vertragsnummer|Vertrag Nr\.?)\s*[:-]?\s*([A-Z0-9./-]{4,})/iu },
+    { key: "invoiceNumber", pattern: /\b(?:Rechnungsnummer|Rechnung Nr\.?)\s*[:-]?\s*([A-Z0-9./-]{4,})/iu },
+    { key: "fileNumber", pattern: /\b(?:Aktenzeichen|Geschäftszeichen|Geschaeftszeichen)\s*[:-]?\s*([A-Z0-9./-]{4,})/iu },
+    { key: "policyNumber", pattern: /\b(?:Versicherungsnummer|Policennummer|Police Nr\.?)\s*[:-]?\s*([A-Z0-9./-]{4,})/iu },
   ];
 
   patterns.forEach(({ key, pattern }) => {
@@ -335,7 +335,7 @@ function detectTerms(
   updatedAt: string,
   facts: Partial<Record<RequiredFactKey, DocumentFact>>,
 ): void {
-  const termMatch = text.match(/\b(?:Laufzeit|Mindestlaufzeit)\s*[:\-]?\s*(\d{1,3})\s*(Monate|Monat|Jahre|Jahr)\b/iu);
+  const termMatch = text.match(/\b(?:Laufzeit|Mindestlaufzeit)\s*[:-]?\s*(\d{1,3})\s*(Monate|Monat|Jahre|Jahr)\b/iu);
 
   if (termMatch?.[1] && termMatch[2]) {
     const months = termMatch[2].toLowerCase().startsWith("jahr")
@@ -360,7 +360,7 @@ function detectTerms(
   }
 
   const cancellationPeriodMatch = text.match(
-    /\b(?:Kündigungsfrist|Kuendigungsfrist|Frist)\s*[:\-]?\s*(\d{1,2})\s*(Monate|Monat|Wochen|Woche|Tage|Tag)\b/iu,
+    /\b(?:Kündigungsfrist|Kuendigungsfrist|Frist)\s*[:-]?\s*(\d{1,2})\s*(Monate|Monat|Wochen|Woche|Tage|Tag)\b/iu,
   );
 
   if (cancellationPeriodMatch?.[0]) {

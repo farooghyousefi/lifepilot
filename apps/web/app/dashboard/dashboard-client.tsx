@@ -113,18 +113,6 @@ export function DashboardClient() {
     [reminders],
   );
 
-  const detectedDeadlines = useMemo(
-    () =>
-      analyses.flatMap((analysis) =>
-        analysis.detectedDeadlines.map((deadline) => ({
-          ...deadline,
-          documentId: analysis.documentId,
-          documentName: analysis.documentName ?? "Unbenanntes Dokument",
-        })),
-      ),
-    [analyses],
-  );
-
   const documentsForReview = useMemo(
     () =>
       analyses.filter(
