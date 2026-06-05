@@ -16,11 +16,12 @@ import {
   Upload,
   type LucideIcon,
 } from "lucide-react";
-import type { DocumentAnalysis, Reminder } from "@lifepilot/shared";
+import type { ContractRecord, DocumentAnalysis, Reminder } from "@lifepilot/shared";
 
 import {
   readStoredDocumentAnalyses,
 } from "../../src/services/documents";
+import { listContractRecords, listMissingFacts } from "../../src/services/knowledge";
 import { readStoredReminders } from "../../src/services/reminders";
 import {
   LifePilotShell,
@@ -31,7 +32,7 @@ import {
 import { DocumentIntelligenceSummary } from "./document-intelligence-summary";
 
 const localDevMessage =
-  "Lokaler Dev-Modus: Analyse und Erinnerungen werden aktuell im Browser gespeichert.";
+  "Lokaler Dev-Modus: Dokumentanalyse, Vertragsdaten und Erinnerungen werden aktuell im Browser gespeichert.";
 
 const quickActions: Array<{
   description: string;
@@ -98,10 +99,12 @@ const lifePilotLoop = [
 
 export function DashboardClient() {
   const [analyses, setAnalyses] = useState<DocumentAnalysis[]>([]);
+  const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
 
   useEffect(() => {
     setAnalyses(readStoredDocumentAnalyses());
+    setContracts(listContractRecords());
     setReminders(readStoredReminders());
   }, []);
 
@@ -132,6 +135,16 @@ export function DashboardClient() {
       ),
     [analyses],
   );
+  const missingFacts = useMemo(() => listMissingFacts(), []);
+  const cancellationSoonContracts = useMemo(
+    () =>
+      contracts.filter(
+        (contract) =>
+          contract.lifecycleStatus === "cancellable-now" ||
+          contract.lifecycleStatus === "cancellation-window-upcoming",
+      ),
+    [contracts],
+  );
 
   const summaryCards = [
     {
@@ -148,25 +161,25 @@ export function DashboardClient() {
     {
       accent: "green",
       icon: CheckCircle2,
-      label: "Bestätigt",
-      meta: "Aus Dokumenten erstellt",
-      value: String(openReminders.length),
+      label: "Verträge",
+      meta: "Unter Beobachtung",
+      value: String(contracts.length),
       visual: "chart",
     },
     {
       accent: "blue",
       icon: FileText,
-      label: "Dokumente",
-      meta: "Lokal analysiert",
-      value: String(analyses.length),
+      label: "Fehlende Angaben",
+      meta: "Nur Pflichtfelder",
+      value: String(missingFacts.length),
       visual: "document",
     },
     {
       accent: "purple",
       icon: FileSearch,
-      label: "Mögliche Fristen",
-      meta: "Noch zu prüfen",
-      value: String(detectedDeadlines.length),
+      label: "Kündigung bald",
+      meta: "Fenster/Entwurf",
+      value: String(cancellationSoonContracts.length),
       visual: "sparkles",
     },
   ] satisfies Array<{
@@ -267,20 +280,57 @@ export function DashboardClient() {
           title="Verträge und Kündigungen"
           tone="green"
         >
-          <StatusRow
-            meta="Vertrags-Cockpit ist vorbereitet und bleibt der nächste Produktbereich."
-            title="Kündigungen aus Dokumenten vorbereiten"
-          />
-          <StatusRow
-            meta="Später: Vertrag erkennen, Frist bestätigen, Kündigung vorbereiten."
-            title="Noch keine echte Vertragsanalyse aktiv"
-          />
+          {contracts.length > 0 ? (
+            contracts.slice(0, 4).map((contract) => (
+              <StatusRow
+                key={contract.id}
+                meta={formatContractMeta(contract)}
+                title={contract.provider ?? contract.name}
+              />
+            ))
+          ) : (
+            <EmptyState text="Noch kein Vertrag gespeichert. Prüfe ein Dokument und speichere es als Vertrag." />
+          )}
           <Link
             className="mt-4 inline-flex items-center justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866]"
             href="/contracts"
           >
             Verträge öffnen
           </Link>
+        </CommandPanel>
+      </section>
+
+      <section className="mt-7 grid gap-5 xl:grid-cols-2">
+        <CommandPanel
+          icon={AlertTriangle}
+          title="Fehlende Angaben"
+          tone="orange"
+        >
+          {missingFacts.length > 0 ? (
+            missingFacts.slice(0, 4).map(({ contract, missingFact }) => (
+              <StatusRow
+                key={`${contract.id}-${missingFact.key}`}
+                meta={missingFact.reason}
+                title={`${contract.provider ?? contract.name}: ${missingFact.label}`}
+              />
+            ))
+          ) : (
+            <EmptyState text="Keine kritischen Pflichtangaben offen." />
+          )}
+        </CommandPanel>
+
+        <CommandPanel icon={FileSearch} title="Agent-Vorschläge" tone="green">
+          {buildAgentSuggestions(contracts).length > 0 ? (
+            buildAgentSuggestions(contracts).map((suggestion) => (
+              <StatusRow
+                key={suggestion}
+                meta="Nur Vorschlag. LifePilot führt nichts automatisch aus."
+                title={suggestion}
+              />
+            ))
+          ) : (
+            <EmptyState text="Sobald Verträge gespeichert sind, schlägt LifePilot nächste Schritte vor." />
+          )}
         </CommandPanel>
       </section>
 
@@ -416,6 +466,44 @@ function EmptyState({ text }: { text: string }) {
       </p>
     </div>
   );
+}
+
+function formatContractMeta(contract: ContractRecord): string {
+  if (contract.missingFacts.length > 0) {
+    return `${contract.missingFacts.length} Pflichtangabe(n) fehlen.`;
+  }
+
+  if (contract.brain.nextImportantDate) {
+    return `Nächste wichtige Frist: ${new Date(
+      contract.brain.nextImportantDate,
+    ).toLocaleDateString("de-DE")}.`;
+  }
+
+  return "Vertrag vollständig erfasst, aber ohne nächste Frist.";
+}
+
+function buildAgentSuggestions(contracts: ContractRecord[]): string[] {
+  return contracts
+    .flatMap((contract) => {
+      if (contract.missingFacts.length > 0) {
+        return `${contract.provider ?? contract.name}: ${contract.missingFacts[0].label} fehlt - bitte ergänzen.`;
+      }
+
+      if (contract.brain.recommendedAction === "cancellation-draft-ready") {
+        return `${contract.provider ?? contract.name}: Kündigung vorbereiten, sobald du die Angaben geprüft hast.`;
+      }
+
+      if (contract.category === "insurance" && contract.dates.cancellationDate) {
+        return `${contract.provider ?? contract.name}: Kündigungsfrist erkannt, bitte prüfen.`;
+      }
+
+      if (contract.category === "authority" && contract.dates.dueDate) {
+        return `${contract.provider ?? contract.name}: Frist erkannt, Antwort vorbereiten.`;
+      }
+
+      return [];
+    })
+    .slice(0, 4);
 }
 
 function formatAnalysisMeta(analysis: DocumentAnalysis): string {

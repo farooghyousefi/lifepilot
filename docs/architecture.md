@@ -18,7 +18,7 @@ Current web product routes:
 - `/login`: public mock sign-in UI
 - `/register`: public mock account creation UI
 - `/dashboard`: LifePilot Command Center for deadlines, document intake, reminders, contracts, and next actions
-- `/contracts`: contract overview, summaries, contract cards, and local add-contract form through `ContractService`
+- `/contracts`: Contract Brain view for saved local `ContractRecord`s, missing facts, cancellation draft preparation, and offer comparison intents
 - `/goals`: goals and focus areas
 - `/documents`: document overview, presigned-upload-aware workflow, local TXT text extraction, deterministic deadline detection, and detail panel
 - `/reminders`: reminder agenda
@@ -29,7 +29,7 @@ Current web product routes:
 
 Document intake is intentionally local/dev for analysis. It does not call an AI provider and does not pretend PDF/OCR is complete. Real S3/DynamoDB persistence depends on AWS deployment.
 
-## Command Center + Document Intake Foundation
+## Document Knowledge Base + Contract Brain MVP
 
 The first vertical product workflow focuses on the visible LifePilot loop:
 
@@ -50,6 +50,14 @@ Current implementation:
   - phrases such as `bis zum`, `fällig am`, `Kündigungsfrist`, and `Zahlungsfrist`
 - Results are shown as "Gefundene Frist / Möglicher Termin" style candidates.
 - Results are stored locally in browser `localStorage` under the web client, not in production storage.
+- Structured document facts are extracted as candidates with value, confidence, source snippet, verification status, and `updatedAt`.
+- Extracted facts are stored locally under `lifepilot.local.knowledge.v1`.
+- The `/documents` detail panel includes a German fact review section.
+- Missing required fields are derived from the detected category and shown only when needed.
+- The user can save reviewed facts as a local `ContractRecord`.
+- Contract Brain calculates lifecycle status, next important date, cancellation readiness, missing facts, and recommended action.
+- `/contracts` reads local `ContractRecord`s instead of fake demo contracts.
+- Action Agent foundation can prepare a local cancellation draft and local offer comparison intent without sending or calling external services.
 - The user can confirm a detected candidate as a reminder.
 - Confirmed document reminders are stored locally in browser `localStorage` under `lifepilot:confirmed-reminders:v1`.
 - The Command Center reads local analysis and reminder results, then shows confirmed reminders before raw candidate deadlines.
@@ -62,6 +70,7 @@ Current limitations:
 - Image OCR is represented by a clean placeholder state.
 - AI provider integration is not implemented and requires a backend-only provider boundary later.
 - Local/dev analysis is device-local and not synchronized.
+- Local/dev ContractRecords, verified facts, missing facts, action drafts, and offer comparison intents are device-local and not synchronized.
 - Local/dev reminders are device-local and not synchronized.
 - Production persistence requires AWS credentials, CDK deploy, and live S3/API validation.
 
@@ -72,19 +81,35 @@ Future backend direction:
 - Add OCR for images/scans.
 - Add AI analysis behind the API, never from the frontend with raw provider keys.
 - Persist confirmed reminders in DynamoDB under Cognito `userId`.
+- Persist extracted facts, verified facts, ContractRecords, missing facts, action drafts, and comparison intents in DynamoDB under Cognito `userId`.
 - Later connect reminders to calendar, email, push notifications, and subscription entitlements.
+
+Not implemented yet:
+
+- production persistence
+- real AWS deploy
+- real PDF extraction
+- real OCR
+- real AI extraction
+- banking APIs
+- comparison portals
+- email/calendar sending
+- automatic cancellation
 
 Next product milestones:
 
 1. Real PDF text extraction.
-2. Photo OCR.
-3. Reminder backend with DynamoDB.
-4. Contract Cockpit.
-5. AI document explanation through a safe backend boundary.
-6. Calendar integration.
-7. Email import.
-8. Subscription system.
-9. Mobile app.
+2. Photo OCR for letters.
+3. Backend persistence for documents/contracts/reminders/action drafts.
+4. AI structured extraction with source evidence.
+5. Contract Cockpit production version.
+6. Offer comparison integration.
+7. Calendar integration.
+8. Email import and email draft creation.
+9. Banking/finance aggregation.
+10. Mobile camera app.
+11. Subscription system.
+12. Privacy/security hardening.
 
 Local API simulation routes:
 

@@ -6,7 +6,7 @@ LifePilot is not positioned as "another AI app". It helps normal non-technical p
 
 This repository must not contain API keys, secrets, real user data, or real private documents.
 
-## Current Milestone: Command Center + Document Intake Foundation
+## Current Milestone: Document Knowledge Base + Contract Brain MVP
 
 The web app now focuses on the real LifePilot loop:
 
@@ -22,9 +22,18 @@ What works now:
 - TXT files can be read locally in the browser.
 - RTF-like raw markup is not shown as normal extracted text.
 - Simple German dates and deadline contexts are detected deterministically.
+- Structured facts are extracted as reviewable candidates: provider, category, identifiers, prices, payment interval, dates, terms, cancellation data, authority references, and related person profile.
+- Every extracted fact keeps value, confidence, source snippet, verification status, and `updatedAt`.
+- `/documents` now has a "Gefundene Daten prüfen" review section.
+- Missing required fields are shown only for the detected category.
+- The user can save reviewed facts as a local `ContractRecord` or authority document record.
+- `/contracts` is now a local Contract Brain page based on saved `ContractRecord`s.
+- Contract Brain calculates lifecycle status, missing facts, next important date, cancellation readiness, and recommended action.
+- Contract action draft logic can prepare a local German cancellation draft. It does not send anything.
+- Offer comparison creates a local `OfferComparisonIntent` only. No live portal is called.
 - Detected candidates are shown as possible deadlines, not as legal facts.
 - The user can confirm a detected deadline as a local reminder.
-- `/dashboard` is now a LifePilot Command Center focused on documents, deadlines, reminders, contracts, and next actions.
+- `/dashboard` uses local knowledge data for contracts, missing facts, possible cancellations, and action suggestions.
 - `/reminders` shows locally confirmed reminders with complete/delete actions.
 - PDF and photo/OCR paths show honest preparation states. They do not fake extraction.
 
@@ -32,9 +41,10 @@ Local/dev scope:
 
 - TXT analysis runs locally in the browser.
 - Analysis results are stored in browser `localStorage` for the current device.
+- Extracted facts and Contract Brain records are stored in `localStorage` under `lifepilot.local.knowledge.v1`.
 - Confirmed reminders are stored in browser `localStorage` for the current device.
 - If the backend is unavailable, `/documents` can still create a clearly labeled local/dev analysis item.
-- Local/dev analysis and reminders are not production storage and are not cross-device sync.
+- Local/dev analysis, contract records, action drafts, offer comparison intents, and reminders are not production storage and are not cross-device sync.
 
 Still requires AWS deployment:
 
@@ -42,19 +52,23 @@ Still requires AWS deployment:
 - Persistent document metadata and upload status in DynamoDB.
 - User-scoped document storage in S3.
 - Persistent `DocumentAnalysis` and reminder records by Cognito user.
+- Persistent extracted facts, verified facts, missing facts, ContractRecords, and action drafts in DynamoDB by Cognito user.
 - Backend OCR/PDF/AI processing without exposing provider keys to the browser.
 
 Next milestones:
 
 1. Real PDF text extraction.
-2. Photo OCR.
-3. Reminder backend with DynamoDB.
-4. Contract Cockpit.
-5. AI document explanation through a safe backend boundary.
-6. Calendar integration.
-7. Email import.
-8. Subscription system.
-9. Mobile app.
+2. Photo OCR for letters.
+3. Backend persistence for documents/contracts/reminders/action drafts.
+4. AI structured extraction with source evidence.
+5. Contract Cockpit production version.
+6. Offer comparison integration.
+7. Calendar integration.
+8. Email import and email draft creation.
+9. Banking/finance aggregation.
+10. Mobile camera app.
+11. Subscription system.
+12. Privacy/security hardening.
 
 ## Stack
 
@@ -83,11 +97,11 @@ lambdas/ai-analysis      AI analysis Lambda placeholder
 docs                     Architecture and development docs
 ```
 
-## Phase 2: Contract Dashboard
+## Earlier Phase: Contract Dashboard Foundation
 
-The web app includes a mock contract dashboard at `/dashboard` for contract and cost management. It shows monthly fixed costs, active contracts, critical cancellation deadlines, estimated annual savings potential, contract cards, and a local add-contract form.
+An earlier milestone introduced contract and cost management concepts with mock data. The current product direction has moved the active contract experience to `/contracts` as the local Contract Brain.
 
-The dashboard currently runs with mock data only. It does not call AWS, does not use a database, and does not send contract data to any API.
+The current Command Center uses browser-local knowledge data and still does not deploy AWS or use production persistence.
 
 ## Phase 3: Contract Backend Foundation
 
@@ -100,20 +114,20 @@ The AWS backend foundation now prepares contract persistence and routes without 
 
 No real AWS data is written in this phase.
 
-## Phase 4: Contract Service Mode
+## Earlier Phase: Contract Service Mode
 
-The dashboard loads contracts through `apps/web/src/services/contracts` instead of importing mock data directly. Local development defaults to mocks:
+The original contract service abstraction is still present for API-client compatibility. Local development can still use mock API data:
 
 ```bash
 NEXT_PUBLIC_USE_MOCKS=true
 NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
 ```
 
-`NEXT_PUBLIC_USE_MOCKS=true` uses `MockContractService` with local mock contracts. Set `NEXT_PUBLIC_USE_MOCKS=false` plus `NEXT_PUBLIC_API_BASE_URL` later to use `ApiContractService`, which delegates to `@lifepilot/api-client` and is ready for an API Gateway URL. This is only a technical switch; no AWS deployment is performed by the web app.
+`NEXT_PUBLIC_USE_MOCKS=true` uses local mock API data. Set `NEXT_PUBLIC_USE_MOCKS=false` plus `NEXT_PUBLIC_API_BASE_URL` later to use API-client calls. This is only a technical switch; no AWS deployment is performed by the web app.
 
 ## Product UI Expansion
 
-The web app now includes a calm LifePilot app shell with shared navigation and workspaces for the Command Center, contracts, documents, reminders, insights, vault, assistant, and settings. The contracts workspace uses `ContractService`, so local mock mode and the future API mode share the same UI boundary. Documents use a presigned-upload-aware architecture, but local analysis and reminders remain browser-local until the AWS backend is deployed and validated. No external AI provider is called from the frontend.
+The web app now includes a calm LifePilot app shell with shared navigation and workspaces for the Command Center, Contract Brain, documents, reminders, insights, vault, assistant, and settings. Documents use a presigned-upload-aware architecture, but local analysis, knowledge records, contracts, action drafts, and reminders remain browser-local until the AWS backend is deployed and validated. No external AI provider is called from the frontend.
 
 ## Phase 5: Documents & Vault
 
@@ -139,6 +153,35 @@ The web app now includes local Next.js API routes that simulate the future API G
 - `GET /api/vault`
 
 Set `NEXT_PUBLIC_USE_MOCKS=false` and `NEXT_PUBLIC_API_BASE_URL=http://localhost:3000/api` to route supported clients through the local API simulation. This still uses mock data only and does not connect to AWS.
+
+## Document Knowledge Base + Contract Brain
+
+The current MVP adds a browser-local knowledge layer in `apps/web/src/services/knowledge`.
+
+Local storage key:
+
+```text
+lifepilot.local.knowledge.v1
+```
+
+It stores:
+
+- extracted document facts by `documentId`
+- verified/corrected facts
+- missing required facts by category
+- local `ContractRecord`s
+- local cancellation drafts
+- local offer comparison intents
+
+Important boundaries:
+
+- Facts start as candidates.
+- The user confirms or corrects facts once.
+- Missing required fields are category-specific.
+- LifePilot must not repeatedly ask for known facts.
+- Cancellation drafts are only drafts.
+- Offer comparison is only planned metadata.
+- No automatic cancellation, email sending, banking call, comparison portal call, or external AI call happens in this milestone.
 
 ## Getting Started
 

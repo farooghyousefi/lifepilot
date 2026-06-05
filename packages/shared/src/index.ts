@@ -16,12 +16,80 @@ export type UserRole = "user" | "admin";
 
 export type ContractCategory =
   | "internet"
-  | "fitness"
-  | "energy"
   | "mobile"
+  | "electricity"
+  | "gas"
   | "insurance"
+  | "rent"
+  | "banking"
+  | "loan"
   | "subscription"
+  | "authority"
+  | "healthcare"
+  | "tax"
   | "other";
+
+export type FactConfidence = "high" | "medium" | "low";
+
+export type FactVerificationStatus =
+  | "extracted"
+  | "user-confirmed"
+  | "user-corrected"
+  | "missing"
+  | "not-applicable";
+
+export type ContractLifecycleStatus =
+  | "draft"
+  | "needs-review"
+  | "active"
+  | "cancellable-now"
+  | "cancellation-window-upcoming"
+  | "cancellation-deadline-missed"
+  | "ended"
+  | "unknown";
+
+export type SuggestedContractAction =
+  | "missing-info-needed"
+  | "reminder-needed"
+  | "cancellation-draft-ready"
+  | "offer-comparison-planned"
+  | "contract-review-needed";
+
+export type RequiredFactKey =
+  | "provider"
+  | "category"
+  | "customerNumber"
+  | "contractNumber"
+  | "invoiceNumber"
+  | "fileNumber"
+  | "policyNumber"
+  | "insuranceType"
+  | "authorityName"
+  | "requestedAction"
+  | "amount"
+  | "monthlyPrice"
+  | "monthlyPayment"
+  | "yearlyEstimate"
+  | "monthlyRent"
+  | "paymentInterval"
+  | "startDate"
+  | "contractDate"
+  | "endDate"
+  | "minimumTerm"
+  | "termMonths"
+  | "cancellationPeriod"
+  | "cancellationDate"
+  | "renewalDate"
+  | "dueDate"
+  | "appointmentDate"
+  | "relatedPersonProfileId";
+
+export type ManagedPersonProfileType =
+  | "me"
+  | "partner"
+  | "child"
+  | "household"
+  | "parent";
 
 export type RiskLevel = "low" | "medium" | "high";
 
@@ -78,6 +146,131 @@ export type ReminderSource =
   | "document-deadline"
   | "contract"
   | "system";
+
+export interface DocumentFact<Value = string> {
+  confidence: FactConfidence;
+  key: RequiredFactKey;
+  label: string;
+  sourceSnippet?: string;
+  updatedAt: ISODateString;
+  value?: Value;
+  verificationStatus: FactVerificationStatus;
+}
+
+export interface ExtractedDocumentFacts {
+  category?: ContractCategory;
+  createdAt: ISODateString;
+  documentId: string;
+  documentName?: string;
+  facts: Partial<Record<RequiredFactKey, DocumentFact>>;
+  updatedAt: ISODateString;
+}
+
+export interface VerifiedDocumentFacts {
+  contractId?: string;
+  documentId?: string;
+  facts: Partial<Record<RequiredFactKey, DocumentFact>>;
+  updatedAt: ISODateString;
+}
+
+export interface MissingFact {
+  isRequired: boolean;
+  key: RequiredFactKey;
+  label: string;
+  reason: string;
+}
+
+export interface ManagedPersonProfile {
+  id: string;
+  label: string;
+  type: ManagedPersonProfileType;
+}
+
+export interface PaymentSourceReference {
+  id: string;
+  label: string;
+  type: "bank-account" | "card" | "manual" | "unknown";
+}
+
+export interface ContractIdentifier {
+  customerNumber?: string;
+  contractNumber?: string;
+  fileNumber?: string;
+  invoiceNumber?: string;
+  policyNumber?: string;
+}
+
+export interface ContractCost {
+  amount?: number;
+  currency: "EUR";
+  interval?: "monthly" | "yearly" | "one-time" | "unknown";
+  sourceFactKey?: RequiredFactKey;
+}
+
+export interface ContractDates {
+  appointmentDate?: ISODateString;
+  cancellationDate?: ISODateString;
+  contractDate?: ISODateString;
+  dueDate?: ISODateString;
+  endDate?: ISODateString;
+  renewalDate?: ISODateString;
+  startDate?: ISODateString;
+}
+
+export interface CancellationInfo {
+  cancellationDate?: ISODateString;
+  cancellationPeriod?: string;
+  canPrepareCancellation: boolean;
+}
+
+export interface ContractBrainSummary {
+  isCancellationDeadlineMissed: boolean;
+  isCancellationPossibleNow: boolean;
+  isCancellationWindowUpcoming: boolean;
+  lifecycleStatus: ContractLifecycleStatus;
+  missingFacts: MissingFact[];
+  nextImportantDate?: ISODateString;
+  recommendedAction: SuggestedContractAction;
+}
+
+export interface OfferComparisonIntent {
+  category: ContractCategory;
+  currentPrice?: number;
+  currentProvider?: string;
+  neededData: RequiredFactKey[];
+  status: "planned" | "missing-data";
+}
+
+export interface ContractActionDraft {
+  body: string;
+  createdAt: ISODateString;
+  id: string;
+  status: "draft" | "prepared";
+  title: string;
+  type: "cancellation";
+  updatedAt: ISODateString;
+}
+
+export interface ContractRecord {
+  actionDraft?: ContractActionDraft;
+  brain: ContractBrainSummary;
+  cancellation: CancellationInfo;
+  category: ContractCategory;
+  cost: ContractCost;
+  createdAt: ISODateString;
+  dates: ContractDates;
+  documentId?: string;
+  facts: Partial<Record<RequiredFactKey, DocumentFact>>;
+  id: string;
+  identifiers: ContractIdentifier;
+  lifecycleStatus: ContractLifecycleStatus;
+  missingFacts: MissingFact[];
+  name: string;
+  offerComparisonIntent?: OfferComparisonIntent;
+  provider?: string;
+  relatedPersonProfileId?: string;
+  updatedAt: ISODateString;
+}
 
 export interface LifeGoal {
   id: string;
@@ -209,6 +402,7 @@ export interface DocumentAnalysis {
   documentId: string;
   documentName?: string;
   errorMessage?: string;
+  extractedFacts?: ExtractedDocumentFacts;
   extractedText?: ExtractedText;
   fileName?: string;
   status: AnalysisStatus;

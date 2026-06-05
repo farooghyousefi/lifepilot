@@ -6,6 +6,7 @@ import type {
 } from "@lifepilot/shared";
 
 import { getAiAnalysisBoundaryNote } from "./ai-analysis-service";
+import { extractDocumentFactsFromText } from "./document-fact-extraction-service";
 import { createOcrExtractionPlaceholder } from "./ocr-extraction-service";
 import { createPdfExtractionPlaceholder } from "./pdf-extraction-service";
 import { extractTextFromPlainTextFile } from "./text-extraction-service";
@@ -64,6 +65,15 @@ export async function analyzeDocumentFile({
           "extractedText" in extraction
             ? detectDeadlines(extraction.extractedText.text)
             : [],
+        extractedFacts:
+          "extractedText" in extraction
+            ? extractDocumentFactsFromText({
+                documentId: document.id,
+                documentName: document.name,
+                extractedAt: analyzedAt,
+                text: extraction.extractedText.text,
+              })
+            : undefined,
         ...extraction,
       };
     }
