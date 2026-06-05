@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - feature/**
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate LifePilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build internal packages
+        run: pnpm -r --filter @lifepilot/api-client --filter @lifepilot/shared --filter @lifepilot/ui build
+
+      - name: Web typecheck
+        run: pnpm --filter @lifepilot/web typecheck
+
+      - name: Web lint
+        run: pnpm --filter @lifepilot/web lint
+
+      - name: Web build
+        run: pnpm --filter @lifepilot/web build
+
+      - name: CDK build
+        run: pnpm --filter @lifepilot/cdk build
+
+      - name: CDK synth
+        run: pnpm --filter @lifepilot/cdk synth
+        env:
+          CDK_DEFAULT_REGION: eu-central-1
+          CDK_DEFAULT_ACCOUNT: "804136008205"
+          LIFEPILOT_BUDGET_EMAIL: ci-budget@example.com
