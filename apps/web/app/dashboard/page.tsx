@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { DashboardClient } from "./dashboard-client";
 
 export const metadata: Metadata = {
-  title: "Life Pilot Dashboard",
+  title: "LifePilot Command Center",
   description:
-    "A calm personal dashboard for contracts, documents, reminders, and AI insights.",
+    "Persönlicher Verwaltungsassistent für Dokumente, Fristen, Verträge und nächste Schritte.",
 };
 
 export default function DashboardPage() {

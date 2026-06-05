@@ -53,6 +53,32 @@ export type DocumentUploadStatus =
   | "uploaded"
   | "failed";
 
+export type AnalysisStatus =
+  | "not-started"
+  | "extracting"
+  | "completed"
+  | "unsupported"
+  | "failed";
+
+export type ExtractedTextSource =
+  | "browser-text-file"
+  | "browser-pdf-placeholder"
+  | "ocr-placeholder"
+  | "ai-provider-placeholder";
+
+export type DetectedDeadlineKind =
+  | "frist"
+  | "zahlung"
+  | "kuendigung"
+  | "termin"
+  | "datum";
+
+export type ReminderSource =
+  | "manual"
+  | "document-deadline"
+  | "contract"
+  | "system";
+
 export interface LifeGoal {
   id: string;
   title: string;
@@ -83,6 +109,23 @@ export interface Reminder {
   dueAt: ISODateString;
   completed: boolean;
   linkedGoalId?: string;
+  notes?: string;
+  source?: ReminderSource;
+  sourceDocumentId?: string;
+  sourceLabel?: string;
+  sourceOriginalText?: string;
+  createdAt?: ISODateString;
+  updatedAt?: ISODateString;
+}
+
+export interface CreateReminderInput {
+  title: string;
+  dueAt: ISODateString;
+  notes?: string;
+  source?: ReminderSource;
+  sourceDocumentId?: string;
+  sourceLabel?: string;
+  sourceOriginalText?: string;
 }
 
 export interface DocumentSummary {
@@ -142,6 +185,34 @@ export interface CompleteDocumentUploadInput {
 
 export interface CompleteDocumentUploadResult {
   document: Document;
+}
+
+export interface ExtractedText {
+  confidence: "high" | "medium" | "low";
+  extractedAt: ISODateString;
+  source: ExtractedTextSource;
+  text: string;
+}
+
+export interface DetectedDeadline {
+  confidence: "high" | "medium" | "low";
+  dateIso?: ISODateString;
+  kind: DetectedDeadlineKind;
+  label: string;
+  originalText: string;
+}
+
+export interface DocumentAnalysis {
+  analyzedAt?: ISODateString;
+  contentType?: string;
+  detectedDeadlines: DetectedDeadline[];
+  documentId: string;
+  documentName?: string;
+  errorMessage?: string;
+  extractedText?: ExtractedText;
+  fileName?: string;
+  status: AnalysisStatus;
+  summary?: string;
 }
 
 export interface VaultItem {

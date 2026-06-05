@@ -11,23 +11,23 @@ import {
 } from "../dashboard/dashboard-ui";
 
 export const metadata: Metadata = {
-  title: "Insights | Life Pilot",
+  title: "Hinweise | LifePilot",
 };
 
 const insightMetrics = [
   {
     accent: "purple",
     icon: Sparkles,
-    label: "AI Insights",
-    meta: "New recommendations",
+    label: "Hinweise",
+    meta: "Ohne externe AI-Aufrufe",
     value: "3",
     visual: "sparkles",
   },
   {
     accent: "green",
     icon: TrendingUp,
-    label: "Opportunities",
-    meta: "Savings and routines",
+    label: "Chancen",
+    meta: "Fristen und Verträge",
     value: "5",
     visual: "chart",
   },
@@ -37,9 +37,9 @@ export default function InsightsPage() {
   return (
     <LifePilotShell activeItem="Insights">
       <PageHeader
-        eyebrow="Insights"
-        subtitle="Signals that help you understand what deserves attention without adding noise."
-        title="Smart overview"
+        eyebrow="Hinweise"
+        subtitle="Ruhige Hinweise darauf, welche Dokumente, Fristen oder Verträge Aufmerksamkeit brauchen."
+        title="Hinweise"
       />
 
       <section className="mt-8 grid gap-4 sm:grid-cols-2">

@@ -5,22 +5,29 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import {
   AlertTriangle,
   CalendarClock,
+  Camera,
   CheckCircle2,
   FileLock2,
   FileText,
-  Link2,
+  FileUp,
+  Info,
+  ListChecks,
   Plus,
   ShieldCheck,
   Trash2,
   Upload,
+  type LucideIcon,
   X,
 } from "lucide-react";
 import { createLifePilotClient } from "@lifepilot/api-client";
 import type {
   CreateDocumentInput,
+  DetectedDeadline,
+  DocumentAnalysis,
   Document as LifePilotDocument,
   DocumentCategory,
   DocumentStatus,
+  Reminder,
   RequestDocumentUploadInput,
 } from "@lifepilot/shared";
 
@@ -29,6 +36,16 @@ import {
   PageHeader,
   SummaryCard,
 } from "../dashboard/dashboard-ui";
+import {
+  analyzeDocumentFile,
+  readStoredDocumentAnalyses,
+  storeDocumentAnalysis,
+} from "../../src/services/documents";
+import {
+  createReminderFromDeadline,
+  getDeadlineReminderKey,
+  readStoredReminders,
+} from "../../src/services/reminders";
 
 const documentClient = createLifePilotClient({
   baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
@@ -36,39 +53,47 @@ const documentClient = createLifePilotClient({
 });
 
 const categories: Array<{ label: string; value: DocumentCategory | "all" }> = [
-  { label: "All", value: "all" },
-  { label: "Contracts", value: "contracts" },
-  { label: "Insurance", value: "insurance" },
-  { label: "Finance", value: "finance" },
-  { label: "Identity", value: "identity" },
-  { label: "Bills", value: "bills" },
-  { label: "Other", value: "other" },
+  { label: "Alle", value: "all" },
+  { label: "Verträge", value: "contracts" },
+  { label: "Versicherungen", value: "insurance" },
+  { label: "Finanzen", value: "finance" },
+  { label: "Identität", value: "identity" },
+  { label: "Rechnungen", value: "bills" },
+  { label: "Sonstiges", value: "other" },
 ];
 
 const categoryLabels: Record<DocumentCategory, string> = {
-  bills: "Bills",
-  contracts: "Contracts",
-  finance: "Finance",
-  identity: "Identity",
-  insurance: "Insurance",
-  other: "Other",
+  bills: "Rechnungen",
+  contracts: "Verträge",
+  finance: "Finanzen",
+  identity: "Identität",
+  insurance: "Versicherungen",
+  other: "Sonstiges",
 };
 
 const statusLabels: Record<DocumentStatus, string> = {
-  "expiring-soon": "Expiring soon",
-  "linked-to-contract": "Linked to contract",
-  "needs-review": "Needs review",
-  protected: "Protected",
+  "expiring-soon": "Frist läuft bald ab",
+  "linked-to-contract": "Mit Vertrag verknüpft",
+  "needs-review": "Zur Prüfung",
+  protected: "Geschützt",
 };
 
 const uploadStatusLabels: Record<
   NonNullable<LifePilotDocument["uploadStatus"]>,
   string
 > = {
-  failed: "Failed",
-  "metadata-only": "Metadata only",
-  "upload-pending": "Upload pending",
-  uploaded: "Uploaded",
+  failed: "Fehlgeschlagen",
+  "metadata-only": "Nur Metadaten",
+  "upload-pending": "Upload ausstehend",
+  uploaded: "Hochgeladen",
+};
+
+const analysisStatusLabels: Record<DocumentAnalysis["status"], string> = {
+  completed: "Analyse abgeschlossen",
+  extracting: "Text wird gelesen",
+  failed: "Analyse fehlgeschlagen",
+  "not-started": "Noch nicht analysiert",
+  unsupported: "Noch nicht unterstützt",
 };
 
 const statusStyles: Record<
@@ -100,41 +125,6 @@ const statusStyles: Record<
     text: "text-[#2FA779]",
   },
 };
-
-const summaryCards = [
-  {
-    accent: "blue",
-    icon: FileText,
-    label: "Total documents",
-    meta: "Demo library",
-    value: "18",
-    visual: "document",
-  },
-  {
-    accent: "red",
-    icon: AlertTriangle,
-    label: "Needs review",
-    meta: "Action recommended",
-    value: "4",
-    visual: "bell",
-  },
-  {
-    accent: "green",
-    icon: ShieldCheck,
-    label: "Protected",
-    meta: "Vault ready",
-    value: "9",
-    visual: "chart",
-  },
-  {
-    accent: "purple",
-    icon: Link2,
-    label: "Linked to contracts",
-    meta: "Connected records",
-    value: "6",
-    visual: "sparkles",
-  },
-] as const;
 
 const emptyForm: CreateDocumentInput = {
   category: "contracts",
@@ -178,9 +168,26 @@ export function DocumentsClient() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [analyses, setAnalyses] = useState<Record<string, DocumentAnalysis>>(
+    {},
+  );
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [localDevNotice, setLocalDevNotice] = useState<string | null>(null);
+  const [reminderMessage, setReminderMessage] = useState<string | null>(null);
+  const [confirmedReminderKeys, setConfirmedReminderKeys] = useState<
+    Set<string>
+  >(new Set());
 
   useEffect(() => {
     let isMounted = true;
+
+    const storedAnalyses = readStoredDocumentAnalyses();
+    setAnalyses(
+      Object.fromEntries(
+        storedAnalyses.map((analysis) => [analysis.documentId, analysis]),
+      ),
+    );
+    setConfirmedReminderKeys(createConfirmedReminderKeys(readStoredReminders()));
 
     async function loadDocuments() {
       await attachCognitoToken();
@@ -195,10 +202,18 @@ export function DocumentsClient() {
 
       setDocuments(loadedDocuments);
       setSelectedDocument(loadedDocuments[0] ?? null);
+      setLoadError(null);
     }
 
     loadDocuments().catch((error) => {
       console.error("Failed to load documents", error);
+      if (isMounted) {
+        setDocuments([]);
+        setSelectedDocument(null);
+        setLoadError(
+          "Dokumente konnten nicht vom Backend geladen werden. Du kannst die lokale Dev-Analyse trotzdem testen.",
+        );
+      }
     });
 
     return () => {
@@ -214,28 +229,78 @@ export function DocumentsClient() {
     [activeCategory, documents],
   );
 
+  const documentsForReview = useMemo(
+    () =>
+      documents.filter((document) =>
+        ["expiring-soon", "needs-review"].includes(document.status),
+      ).length +
+      Object.values(analyses).filter(
+        (analysis) =>
+          analysis.status === "unsupported" ||
+          analysis.status === "failed" ||
+          analysis.detectedDeadlines.length > 0,
+      ).length,
+    [analyses, documents],
+  );
+
+  const documentSummaryCards = [
+    {
+      accent: "blue",
+      icon: FileText,
+      label: "Dokumente",
+      meta: "Backend oder lokaler Dev-Fallback",
+      value: String(documents.length),
+      visual: "document",
+    },
+    {
+      accent: "orange",
+      icon: AlertTriangle,
+      label: "Zur Prüfung",
+      meta: "Fristen oder offene Analyse",
+      value: String(documentsForReview),
+      visual: "bell",
+    },
+    {
+      accent: "green",
+      icon: ShieldCheck,
+      label: "Lokal analysiert",
+      meta: "Browser-Speicher",
+      value: String(Object.keys(analyses).length),
+      visual: "chart",
+    },
+    {
+      accent: "purple",
+      icon: CalendarClock,
+      label: "Erinnerungen",
+      meta: "Aus Dokumenten bestätigt",
+      value: String(confirmedReminderKeys.size),
+      visual: "sparkles",
+    },
+  ] as const;
+
   const saveDocument = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setUploadError(null);
     setSuccessMessage(null);
+    setLocalDevNotice(null);
 
     if (!form.name.trim()) {
-      setUploadError("Please enter a document name.");
+      setUploadError("Bitte gib einen Dokumentnamen ein.");
       return;
     }
 
     if (!selectedFile) {
-      setUploadError("Please choose a file to upload.");
+      setUploadError("Bitte wähle eine Datei aus.");
       return;
     }
 
     if (!allowedFileTypes.has(selectedFile.type)) {
-      setUploadError("Only PDF, PNG, JPG/JPEG and TXT files are supported.");
+      setUploadError("Nur PDF, PNG, JPG/JPEG und TXT werden unterstützt.");
       return;
     }
 
     if (selectedFile.size > maxFileSizeBytes) {
-      setUploadError("File size must be 5 MB or less.");
+      setUploadError("Die Datei darf maximal 5 MB groß sein.");
       return;
     }
 
@@ -266,19 +331,44 @@ export function DocumentsClient() {
           uploadRequest.data.document.id,
         );
       const uploadedDocument = completedUpload.data.document;
+      const analysis = await analyzeDocumentFile({
+        document: uploadedDocument,
+        file: selectedFile,
+      });
 
+      storeDocumentAnalysis(analysis);
       setDocuments((current) => [uploadedDocument, ...current]);
       setSelectedDocument(uploadedDocument);
+      setAnalyses((current) => ({
+        ...current,
+        [uploadedDocument.id]: analysis,
+      }));
       setForm(emptyForm);
       setSelectedFile(null);
       setIsUploadOpen(false);
       setSuccessMessage(
-        "Document uploaded to private S3 storage and saved to your account.",
+        "Dokument wurde hochgeladen und lokal analysiert.",
       );
     } catch (error) {
       console.error("Failed to upload document", error);
-      setUploadError(
-        "Upload failed. Please check the file and try again.",
+      const localDocument = createLocalDevDocument(form, selectedFile);
+      const analysis = await analyzeDocumentFile({
+        document: localDocument,
+        file: selectedFile,
+      });
+
+      storeDocumentAnalysis(analysis);
+      setDocuments((current) => [localDocument, ...current]);
+      setSelectedDocument(localDocument);
+      setAnalyses((current) => ({
+        ...current,
+        [localDocument.id]: analysis,
+      }));
+      setForm(emptyForm);
+      setSelectedFile(null);
+      setIsUploadOpen(false);
+      setLocalDevNotice(
+        "Lokaler Dev-Fallback aktiv: Datei wurde nicht produktiv gespeichert, aber lokal analysiert.",
       );
     } finally {
       setIsUploading(false);
@@ -290,16 +380,77 @@ export function DocumentsClient() {
     setIsMobileDetailOpen(true);
   };
 
+  const createDeadlineReminder = (
+    document: LifePilotDocument,
+    deadline: DetectedDeadline,
+  ) => {
+    setReminderMessage(null);
+
+    try {
+      createReminderFromDeadline({ deadline, document });
+      setConfirmedReminderKeys(createConfirmedReminderKeys(readStoredReminders()));
+      setReminderMessage(
+        "Erinnerung wurde lokal erstellt und erscheint im Dashboard.",
+      );
+    } catch {
+      setReminderMessage(
+        "Für diese Frist fehlt noch ein klares Datum. Bitte prüfe den Text manuell.",
+      );
+    }
+  };
+
   return (
     <LifePilotShell activeItem="Documents">
       <PageHeader
-        eyebrow="Documents"
-        subtitle="Organize your important documents, contracts and personal records."
-        title="Documents"
+        eyebrow="Dokumente"
+        subtitle="Erfasse Briefe, Verträge, Rechnungen und Unterlagen. LifePilot bereitet Fristen und nächste Schritte vor."
+        title="Dokumente erfassen"
       />
 
+      <section className="mt-6 rounded-[20px] border border-[#FDECCB] bg-[#FFF7EA] p-5">
+        <div className="flex items-start gap-3">
+          <Info className="mt-0.5 size-5 shrink-0 text-[#D98806]" />
+          <p className="text-[13px] font-semibold leading-6 text-[#667085]">
+            Lokaler Dev-Modus: TXT-Analyse und bestätigte Erinnerungen werden
+            aktuell im Browser gespeichert. PDF-Texterkennung und Foto/OCR sind
+            vorbereitet, aber noch nicht produktiv aktiv.
+          </p>
+        </div>
+      </section>
+
+      <section className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <IntakeOptionCard
+          action="Datei auswählen"
+          icon={FileUp}
+          onClick={() => setIsUploadOpen(true)}
+          status="PDF-Texterkennung vorbereitet"
+          title="PDF hochladen"
+        />
+        <IntakeOptionCard
+          action="TXT analysieren"
+          icon={FileText}
+          onClick={() => setIsUploadOpen(true)}
+          status="TXT wird lokal gelesen"
+          title="TXT hochladen"
+        />
+        <IntakeOptionCard
+          action="Noch nicht aktiv"
+          icon={Camera}
+          isDisabled
+          status="Foto/OCR kommt als nächster Schritt"
+          title="Brief fotografieren"
+        />
+        <IntakeOptionCard
+          action="PDF, TXT, PNG, JPG"
+          icon={ListChecks}
+          isDisabled
+          status="Keine echten AI- oder OCR-Aufrufe"
+          title="Unterstützte Formate"
+        />
+      </section>
+
       <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {summaryCards.map((card) => (
+        {documentSummaryCards.map((card) => (
           <SummaryCard
             accent={card.accent}
             icon={card.icon}
@@ -319,15 +470,37 @@ export function DocumentsClient() {
         </div>
       ) : null}
 
+      {localDevNotice ? (
+        <div className="mt-5 flex items-center gap-3 rounded-[18px] border border-[#FDECCB] bg-[#FFF7EA] px-5 py-4 text-[14px] font-bold text-[#D98806]">
+          <AlertTriangle className="size-5" aria-hidden="true" />
+          {localDevNotice}
+        </div>
+      ) : null}
+
+      {reminderMessage ? (
+        <div className="mt-5 flex items-center gap-3 rounded-[18px] border border-[#DDEFE6] bg-[#F2FAF6] px-5 py-4 text-[14px] font-bold text-[#2FA779]">
+          <CheckCircle2 className="size-5" aria-hidden="true" />
+          {reminderMessage}
+        </div>
+      ) : null}
+
+      {loadError ? (
+        <div className="mt-5 flex items-center gap-3 rounded-[18px] border border-[#FDECCB] bg-[#FFF7EA] px-5 py-4 text-[14px] font-bold text-[#D98806]">
+          <AlertTriangle className="size-5" aria-hidden="true" />
+          {loadError}
+        </div>
+      ) : null}
+
       <section className="mt-7 grid gap-5 xl:grid-cols-[1fr_390px]">
         <section className="rounded-[22px] border border-[#ECEFEB] bg-white p-5 shadow-card sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xl font-bold tracking-[-0.01em] text-[#101828]">
-                Document library
+                Dokumenteingang
               </h2>
               <p className="mt-1 text-[13px] font-semibold text-[#667085]">
-                Files are uploaded directly to private S3 storage.
+                Neue Dokumente werden erfasst, lokal analysiert und für Fristen
+                vorbereitet.
               </p>
             </div>
             <button
@@ -336,7 +509,7 @@ export function DocumentsClient() {
               type="button"
             >
               <Upload className="size-4" aria-hidden="true" />
-              Upload document
+              Dokument erfassen
             </button>
           </div>
 
@@ -370,11 +543,29 @@ export function DocumentsClient() {
                 onSelect={() => selectDocument(document)}
               />
             ))}
+            {filteredDocuments.length === 0 ? (
+              <div className="rounded-[20px] border border-[#ECEFEB] bg-[#FCFBFA] p-6">
+                <p className="text-[15px] font-bold text-[#101828]">
+                  Noch keine Dokumente in dieser Ansicht.
+                </p>
+                <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
+                  Erfasse ein TXT-Dokument, um den aktuellen Analyse- und
+                  Reminder-Flow sofort sichtbar zu testen.
+                </p>
+              </div>
+            ) : null}
           </div>
         </section>
 
         <div className="hidden xl:block">
-          <DocumentDetailPanel document={selectedDocument} />
+          <DocumentDetailPanel
+            analysis={
+              selectedDocument ? analyses[selectedDocument.id] : undefined
+            }
+            confirmedReminderKeys={confirmedReminderKeys}
+            document={selectedDocument}
+            onCreateReminder={createDeadlineReminder}
+          />
         </div>
       </section>
 
@@ -382,6 +573,7 @@ export function DocumentsClient() {
         <UploadDialog
           form={form}
           isUploading={isUploading}
+          isLocalDevFallback={Boolean(loadError)}
           onChange={setForm}
           onClose={() => {
             if (isUploading) {
@@ -411,12 +603,59 @@ export function DocumentsClient() {
               <X className="size-5" aria-hidden="true" />
             </button>
             <div className="mt-2 overflow-y-auto">
-              <DocumentDetailPanel document={selectedDocument} />
+              <DocumentDetailPanel
+                analysis={analyses[selectedDocument.id]}
+                confirmedReminderKeys={confirmedReminderKeys}
+                document={selectedDocument}
+                onCreateReminder={createDeadlineReminder}
+              />
             </div>
           </div>
         </div>
       ) : null}
     </LifePilotShell>
+  );
+}
+
+function IntakeOptionCard({
+  action,
+  icon: Icon,
+  isDisabled = false,
+  onClick,
+  status,
+  title,
+}: {
+  action: string;
+  icon: LucideIcon;
+  isDisabled?: boolean;
+  onClick?: () => void;
+  status: string;
+  title: string;
+}) {
+  return (
+    <button
+      className={`rounded-[20px] border p-5 text-left transition ${
+        isDisabled
+          ? "border-[#ECEFEB] bg-[#FCFBFA] text-[#667085]"
+          : "border-[#DDEFE6] bg-white shadow-card hover:border-[#B9DEC7] hover:bg-[#F8FCFA]"
+      }`}
+      disabled={isDisabled}
+      onClick={onClick}
+      type="button"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex size-12 items-center justify-center rounded-2xl bg-[#EAF7F0] text-[#2FA779]">
+          <Icon className="size-6" aria-hidden="true" />
+        </div>
+        <span className="rounded-full bg-[#F7F8F5] px-3 py-1 text-[11px] font-bold text-[#667085]">
+          {action}
+        </span>
+      </div>
+      <h2 className="mt-5 text-[17px] font-bold text-[#101828]">{title}</h2>
+      <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
+        {status}
+      </p>
+    </button>
   );
 }
 
@@ -461,7 +700,7 @@ function DocumentCard({
           {document.linkedContract ? (
             <span className="inline-flex items-center gap-2 rounded-full bg-[#F1F6FF] px-3 py-1.5 text-[12px] font-bold text-[#2F80ED]">
               <span className="size-2 rounded-full bg-[#2F80ED]" />
-              Linked to contract
+              Mit Vertrag verknüpft
             </span>
           ) : null}
         </div>
@@ -469,25 +708,34 @@ function DocumentCard({
 
       <div className="mt-4 flex items-center gap-2 text-[13px] font-semibold text-[#667085]">
         <span className={`size-2 rounded-full ${status.dot}`} />
-        Added {new Date(document.addedAt).toLocaleDateString("en-US")}
+        Hinzugefügt am {new Date(document.addedAt).toLocaleDateString("de-DE")}
       </div>
     </button>
   );
 }
 
 function DocumentDetailPanel({
+  analysis,
+  confirmedReminderKeys,
   document,
+  onCreateReminder,
 }: {
+  analysis?: DocumentAnalysis;
+  confirmedReminderKeys: Set<string>;
   document: LifePilotDocument | null;
+  onCreateReminder: (
+    document: LifePilotDocument,
+    deadline: DetectedDeadline,
+  ) => void;
 }) {
   if (!document) {
     return (
       <aside className="rounded-[22px] border border-[#ECEFEB] bg-white p-6 shadow-card">
         <p className="text-[15px] font-bold text-[#101828]">
-          Select a document
+          Dokument auswählen
         </p>
         <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
-          Select a document to review its metadata and next action.
+          Wähle ein Dokument, um Metadaten, Textpreview und erkannte Fristen zu sehen.
         </p>
       </aside>
     );
@@ -501,7 +749,7 @@ function DocumentDetailPanel({
         </div>
         <div>
           <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#2FA779]">
-            Document details
+            Dokumentdetails
           </p>
           <h2 className="mt-2 text-xl font-bold tracking-[-0.01em] text-[#101828]">
             {document.name}
@@ -510,46 +758,55 @@ function DocumentDetailPanel({
       </div>
 
       <div className="mt-6 space-y-4">
-        <DetailRow label="Category" value={categoryLabels[document.category]} />
+        <DetailRow label="Kategorie" value={categoryLabels[document.category]} />
         <DetailRow label="Status" value={statusLabels[document.status]} />
         <DetailRow
-          label="Added date"
-          value={new Date(document.addedAt).toLocaleDateString("en-US")}
+          label="Erstellt am"
+          value={new Date(document.addedAt).toLocaleDateString("de-DE")}
         />
         <DetailRow
-          label="Linked contract"
-          value={document.linkedContract ?? "Not linked yet"}
+          label="Verknüpfter Vertrag"
+          value={document.linkedContract ?? "Noch nicht verknüpft"}
         />
         <DetailRow
-          label="Upload status"
+          label="Upload-Status"
           value={
             uploadStatusLabels[document.uploadStatus ?? "metadata-only"] ??
-            "Metadata only"
+            "Nur Metadaten"
           }
         />
         <DetailRow
-          label="File name"
-          value={document.fileName ?? "No file attached"}
+          label="Dateiname"
+          value={document.fileName ?? "Keine Datei angehängt"}
         />
         <DetailRow
-          label="File size"
+          label="Dateigröße"
           value={
             typeof document.sizeBytes === "number"
               ? formatFileSize(document.sizeBytes)
-              : "Not available"
+              : "Nicht verfügbar"
           }
         />
         <DetailRow
-          label="Content type"
-          value={document.contentType ?? "Not available"}
+          label="Dateityp"
+          value={document.contentType ?? "Nicht verfügbar"}
         />
-        <DetailRow label="S3 key" value={document.s3Key ?? "Not available"} />
+        <DetailRow
+          label="Speicherpfad"
+          value={document.s3Key ?? "Nicht verfügbar"}
+        />
       </div>
 
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        confirmedReminderKeys={confirmedReminderKeys}
+        document={document}
+        onCreateReminder={onCreateReminder}
+      />
       <div className="mt-6 rounded-[18px] bg-[#F2FAF6] p-4">
         <div className="flex items-center gap-2 text-[14px] font-bold text-[#2FA779]">
           <ShieldCheck className="size-5" aria-hidden="true" />
-          Security note
+          Sicherheitshinweis
         </div>
         <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
           {document.securityNote}
@@ -559,7 +816,7 @@ function DocumentDetailPanel({
       <div className="mt-4 rounded-[18px] bg-[#F8F4FF] p-4">
         <div className="flex items-center gap-2 text-[14px] font-bold text-[#6F54E8]">
           <CalendarClock className="size-5" aria-hidden="true" />
-          Recommended action
+          Empfohlener nächster Schritt
         </div>
         <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
           {document.recommendedAction}
@@ -567,7 +824,11 @@ function DocumentDetailPanel({
       </div>
 
       <div className="mt-6 grid gap-3">
-        {["Review document", "Link to contract", "Move to vault"].map(
+        {[
+          "Dokument prüfen",
+          "Mit Vertrag verknüpfen",
+          "In Tresor verschieben",
+        ].map(
           (label) => (
             <button
               className="rounded-xl border border-[#ECEFEB] bg-white px-4 py-3 text-[13px] font-bold text-[#344054] shadow-button transition hover:border-[#D5EBDD] hover:text-[#2FA779]"
@@ -583,7 +844,7 @@ function DocumentDetailPanel({
           type="button"
         >
           <Trash2 className="size-4" aria-hidden="true" />
-          Delete demo item
+          Demo-Eintrag löschen
         </button>
       </div>
     </aside>
@@ -592,6 +853,7 @@ function DocumentDetailPanel({
 
 function UploadDialog({
   form,
+  isLocalDevFallback,
   isUploading,
   onChange,
   onClose,
@@ -601,6 +863,7 @@ function UploadDialog({
   uploadError,
 }: {
   form: CreateDocumentInput;
+  isLocalDevFallback: boolean;
   isUploading: boolean;
   onChange: (form: CreateDocumentInput) => void;
   onClose: () => void;
@@ -628,10 +891,12 @@ function UploadDialog({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold tracking-[-0.01em] text-[#101828]">
-              Upload document
+              Dokument erfassen
             </h2>
             <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
-              Files are uploaded directly to private S3 storage.
+              {isLocalDevFallback
+                ? "Backend nicht erreichbar: Upload wird lokal als Dev-Fallback analysiert."
+                : "Metadaten werden gespeichert; TXT wird lokal analysiert. PDF und Foto/OCR sind vorbereitet."}
             </p>
           </div>
           <button
@@ -654,12 +919,12 @@ function UploadDialog({
 
           <label className="block">
             <span className="text-[13px] font-bold text-[#344054]">
-              Document name
+              Dokumentname
             </span>
             <input
               className="mt-2 w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[14px] font-semibold text-[#101828] outline-none transition placeholder:text-[#98A2B3] focus:border-[#B9DEC7] focus:bg-white"
               onChange={(event) => updateForm("name", event.target.value)}
-              placeholder="e.g. Demo insurance policy"
+              placeholder="z. B. Versicherungsschreiben"
               required
               type="text"
               value={form.name}
@@ -669,7 +934,7 @@ function UploadDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
               <span className="text-[13px] font-bold text-[#344054]">
-                Category
+                Kategorie
               </span>
               <select
                 className="mt-2 w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[14px] font-semibold text-[#101828] outline-none transition focus:border-[#B9DEC7] focus:bg-white"
@@ -710,7 +975,7 @@ function UploadDialog({
 
           <label className="block">
             <span className="text-[13px] font-bold text-[#344054]">
-              File
+              Datei
             </span>
             <input
               accept=".pdf,.png,.jpg,.jpeg,.txt,application/pdf,image/png,image/jpeg,text/plain"
@@ -723,7 +988,8 @@ function UploadDialog({
               type="file"
             />
             <p className="mt-2 text-[12px] font-semibold leading-5 text-[#667085]">
-              PDF, PNG, JPG/JPEG or TXT. Maximum size: 5 MB.
+              TXT wird aktuell lokal gelesen. PDF-Texterkennung ist vorbereitet.
+              Foto/OCR kommt als nächster Schritt. Maximale Größe: 5 MB.
             </p>
             {selectedFile ? (
               <div className="mt-3 rounded-[16px] border border-[#DDEFE6] bg-[#F8FCFA] px-4 py-3 text-[13px] font-semibold text-[#344054]">
@@ -734,13 +1000,13 @@ function UploadDialog({
 
           <label className="block">
             <span className="text-[13px] font-bold text-[#344054]">
-              Notes
+              Notizen
             </span>
             <textarea
               className="mt-2 min-h-28 w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[14px] font-semibold text-[#101828] outline-none transition placeholder:text-[#98A2B3] focus:border-[#B9DEC7] focus:bg-white"
               disabled={isUploading}
               onChange={(event) => updateForm("notes", event.target.value)}
-              placeholder="Short demo note..."
+              placeholder="Kurze Notiz..."
               value={form.notes}
             />
           </label>
@@ -752,10 +1018,166 @@ function UploadDialog({
           type="submit"
         >
           <Plus className="size-4" aria-hidden="true" />
-          {isUploading ? "Uploading..." : "Upload document"}
+          {isUploading ? "Wird verarbeitet..." : "Dokument analysieren"}
         </button>
       </form>
     </div>
+  );
+}
+
+function DocumentAnalysisPanel({
+  analysis,
+  confirmedReminderKeys,
+  document,
+  onCreateReminder,
+}: {
+  analysis?: DocumentAnalysis;
+  confirmedReminderKeys: Set<string>;
+  document: LifePilotDocument;
+  onCreateReminder: (
+    document: LifePilotDocument,
+    deadline: DetectedDeadline,
+  ) => void;
+}) {
+  if (!analysis) {
+    return (
+      <section className="mt-6 rounded-[18px] border border-[#EDE5FF] bg-[#F8F4FF] p-4">
+        <div className="flex items-center gap-2 text-[14px] font-bold text-[#6F54E8]">
+          <CalendarClock className="size-5" aria-hidden="true" />
+          Dokumentenanalyse
+        </div>
+        <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
+          Noch keine Analyse vorhanden. Lade eine TXT-Datei hoch, um Text lokal
+          zu lesen und mögliche Fristen zu erkennen.
+        </p>
+        {document.contentType?.startsWith("image/") ? (
+          <p className="mt-2 text-[13px] font-bold text-[#D98806]">
+            OCR kommt als nächster Schritt.
+          </p>
+        ) : null}
+      </section>
+    );
+  }
+
+  return (
+    <section className="mt-6 rounded-[18px] border border-[#EDE5FF] bg-[#F8F4FF] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-[14px] font-bold text-[#6F54E8]">
+          <CalendarClock className="size-5" aria-hidden="true" />
+          Dokumentenanalyse
+        </div>
+        <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-[#6F54E8]">
+          Lokal/Dev
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        <DetailRow
+          label="Analyse-Status"
+          value={analysisStatusLabels[analysis.status]}
+        />
+        <DetailRow
+          label="Analysiert am"
+          value={
+            analysis.analyzedAt
+              ? new Date(analysis.analyzedAt).toLocaleString("de-DE")
+              : "Noch nicht analysiert"
+          }
+        />
+      </div>
+
+      {analysis.summary ? (
+        <p className="mt-4 text-[13px] font-semibold leading-6 text-[#667085]">
+          {analysis.summary}
+        </p>
+      ) : null}
+
+      {analysis.errorMessage ? (
+        <div className="mt-4 rounded-[16px] border border-[#FDECCB] bg-[#FFF7EA] px-4 py-3 text-[13px] font-bold text-[#D98806]">
+          {analysis.errorMessage}
+        </div>
+      ) : null}
+
+      <div className="mt-5">
+        <h3 className="text-[14px] font-bold text-[#101828]">
+          Erkannter Text
+        </h3>
+        {analysis.extractedText?.text ? (
+          <div className="mt-3 max-h-56 overflow-y-auto rounded-[16px] border border-[#ECEFEB] bg-white p-4 text-[13px] font-medium leading-6 text-[#344054]">
+            {analysis.extractedText.text.slice(0, 1800)}
+            {analysis.extractedText.text.length > 1800 ? " ..." : ""}
+          </div>
+        ) : (
+          <p className="mt-2 rounded-[16px] border border-[#ECEFEB] bg-white px-4 py-3 text-[13px] font-semibold text-[#667085]">
+            Für diesen Dateityp ist in Phase 1 noch kein Text verfügbar.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-5">
+        <h3 className="text-[14px] font-bold text-[#101828]">
+          Erkannte Fristen und Termine
+        </h3>
+        {analysis.detectedDeadlines.length > 0 ? (
+          <div className="mt-3 grid gap-3">
+            {analysis.detectedDeadlines.map((deadline) => {
+              const reminderKey = getDeadlineReminderKey({
+                deadline,
+                documentId: document.id,
+              });
+              const hasReminder = confirmedReminderKeys.has(reminderKey);
+
+              return (
+                <article
+                  className="rounded-[16px] border border-[#DDEFE6] bg-white p-4"
+                  key={`${deadline.kind}-${deadline.dateIso ?? deadline.originalText}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-[#EAF7F0] px-3 py-1 text-[11px] font-bold text-[#2FA779]">
+                      {deadline.label}
+                    </span>
+                    <span className="rounded-full bg-[#F7F8F5] px-3 py-1 text-[11px] font-bold text-[#667085]">
+                      Sicherheit: {deadline.confidence}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-[15px] font-bold text-[#101828]">
+                    {deadline.dateIso
+                      ? new Date(deadline.dateIso).toLocaleDateString("de-DE")
+                      : "Kein eindeutiges Datum"}
+                  </p>
+                  <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
+                    {deadline.originalText}
+                  </p>
+                  <button
+                    className={`mt-4 inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-[13px] font-bold transition ${
+                      hasReminder
+                        ? "bg-[#F2FAF6] text-[#2FA779]"
+                        : deadline.dateIso
+                          ? "bg-[#2FA779] text-white hover:bg-[#258866]"
+                          : "bg-[#F7F8F5] text-[#98A2B3]"
+                    }`}
+                    disabled={hasReminder || !deadline.dateIso}
+                    onClick={() => onCreateReminder(document, deadline)}
+                    type="button"
+                  >
+                    {hasReminder
+                      ? "Erinnerung erstellt"
+                      : deadline.dateIso
+                        ? "Erinnerung erstellen"
+                        : "Datum erst prüfen"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="mt-2 rounded-[16px] border border-[#ECEFEB] bg-white px-4 py-3 text-[13px] font-semibold text-[#667085]">
+            Keine Fristen erkannt. Bei TXT-Dateien sucht LifePilot nach
+            deutschen Datumsformaten und Frist-Kontext.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -819,4 +1241,44 @@ function formatFileSize(sizeBytes: number): string {
   }
 
   return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function createLocalDevDocument(
+  form: CreateDocumentInput,
+  file: File,
+): LifePilotDocument {
+  const now = new Date().toISOString();
+  const documentId = `local-dev-document-${Date.now()}`;
+
+  return {
+    addedAt: now,
+    category: form.category,
+    contentType: file.type || "application/octet-stream",
+    fileName: file.name,
+    id: documentId,
+    name: form.name.trim(),
+    notes: form.notes?.trim() || undefined,
+    recommendedAction:
+      "Prüfe die lokal erkannten Fristen. Für produktive Speicherung ist AWS Deploy erforderlich.",
+    s3Key: `local-dev/${documentId}/${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`,
+    securityNote:
+      "Lokaler Dev-Fallback: Diese Datei wurde nicht produktiv in S3 gespeichert.",
+    sizeBytes: file.size,
+    status: form.status,
+    uploadStatus: "metadata-only",
+  };
+}
+
+function createConfirmedReminderKeys(reminders: Reminder[]): Set<string> {
+  return new Set(
+    reminders
+      .filter((reminder) => reminder.source === "document-deadline")
+      .map((reminder) =>
+        getDeadlineReminderKey({
+          dateIso: reminder.dueAt.slice(0, 10),
+          documentId: reminder.sourceDocumentId,
+          originalText: reminder.sourceOriginalText,
+        }),
+      ),
+  );
 }

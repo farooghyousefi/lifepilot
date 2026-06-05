@@ -1,31 +1,90 @@
 # Architecture
 
-Life Pilot is split into product surfaces, shared code, serverless placeholders, and AWS infrastructure preparation.
+LifePilot is a personal administration assistant, not a generic AI app. The product is organized around documents, contracts, bills, letters, deadlines, appointments, and next actions for normal non-technical users.
+
+The current architecture is split into product surfaces, shared code, browser-local document intelligence, serverless placeholders, and AWS infrastructure preparation.
 
 ## Product Surfaces
 
-- `apps/web`: Next.js App Router landing page, calm Life Pilot dashboard shell, and local mock product routes with Tailwind CSS.
+- `apps/web`: Next.js App Router landing page, calm LifePilot Command Center, document intake workspace, reminders workspace, and local/dev product routes with Tailwind CSS.
 - `apps/mobile`: Expo React Native skeleton for the future mobile experience.
 
 Both clients currently use `@lifepilot/api-client` with mock data. The web dashboard accesses contracts through `apps/web/src/services/contracts` so the data source can switch from mocks to an API Gateway-backed client later.
 
-The web app also exposes local Next.js API routes under `/api` to simulate the future API Gateway/Lambda boundary before deployment.
+The web app also exposes local Next.js API routes under `/api` to simulate parts of the API Gateway/Lambda boundary before deployment.
 
 Current web product routes:
 
 - `/login`: public mock sign-in UI
 - `/register`: public mock account creation UI
-- `/dashboard`: overview dashboard
+- `/dashboard`: LifePilot Command Center for deadlines, document intake, reminders, contracts, and next actions
 - `/contracts`: contract overview, summaries, contract cards, and local add-contract form through `ContractService`
 - `/goals`: goals and focus areas
-- `/documents`: document overview, category filtering, demo upload metadata, and detail panel
+- `/documents`: document overview, presigned-upload-aware workflow, local TXT text extraction, deterministic deadline detection, and detail panel
 - `/reminders`: reminder agenda
 - `/insights`: recommendation overview
 - `/vault`: protected demo document list and security-by-design preparation UI
 - `/ai-assistant`: assistant experience placeholder
 - `/settings`: settings placeholder
 
-These routes are frontend-only mock surfaces. They do not upload documents, call AI providers, connect to AWS, or store real user data.
+Document intake is intentionally local/dev for analysis. It does not call an AI provider and does not pretend PDF/OCR is complete. Real S3/DynamoDB persistence depends on AWS deployment.
+
+## Command Center + Document Intake Foundation
+
+The first vertical product workflow focuses on the visible LifePilot loop:
+
+1. A document comes in.
+2. LifePilot reads what is currently supported.
+3. LifePilot detects important dates and possible deadlines.
+4. The user reviews and confirms.
+5. LifePilot creates a reminder.
+
+Current implementation:
+
+- TXT files are read directly in the browser.
+- RTF-like raw markup is detected and not displayed as normal extracted text.
+- Extracted text is visible in the document detail panel.
+- Simple German date formats are parsed deterministically:
+  - `12.06.2026`
+  - `12. Juni 2026`
+  - phrases such as `bis zum`, `fällig am`, `Kündigungsfrist`, and `Zahlungsfrist`
+- Results are shown as "Gefundene Frist / Möglicher Termin" style candidates.
+- Results are stored locally in browser `localStorage` under the web client, not in production storage.
+- The user can confirm a detected candidate as a reminder.
+- Confirmed document reminders are stored locally in browser `localStorage` under `lifepilot:confirmed-reminders:v1`.
+- The Command Center reads local analysis and reminder results, then shows confirmed reminders before raw candidate deadlines.
+- The `/reminders` workspace shows confirmed document reminders without old static date demos.
+- Service boundaries are split for text extraction, PDF extraction placeholder, OCR extraction placeholder, and future backend-only AI analysis.
+
+Current limitations:
+
+- PDF text extraction is represented by a clean placeholder state.
+- Image OCR is represented by a clean placeholder state.
+- AI provider integration is not implemented and requires a backend-only provider boundary later.
+- Local/dev analysis is device-local and not synchronized.
+- Local/dev reminders are device-local and not synchronized.
+- Production persistence requires AWS credentials, CDK deploy, and live S3/API validation.
+
+Future backend direction:
+
+- Store `DocumentAnalysis` records in DynamoDB under Cognito `userId`.
+- Read text from S3 objects in a dedicated Lambda workflow.
+- Add OCR for images/scans.
+- Add AI analysis behind the API, never from the frontend with raw provider keys.
+- Persist confirmed reminders in DynamoDB under Cognito `userId`.
+- Later connect reminders to calendar, email, push notifications, and subscription entitlements.
+
+Next product milestones:
+
+1. Real PDF text extraction.
+2. Photo OCR.
+3. Reminder backend with DynamoDB.
+4. Contract Cockpit.
+5. AI document explanation through a safe backend boundary.
+6. Calendar integration.
+7. Email import.
+8. Subscription system.
+9. Mobile app.
 
 Local API simulation routes:
 
@@ -43,7 +102,7 @@ Route boundaries are documented in `apps/web/src/navigation/routes.ts`:
 - Public routes: `/`, `/login`, `/register`
 - App routes: `/dashboard`, `/contracts`, `/documents`, `/vault`, `/reminders`, `/insights`, `/ai-assistant`, `/settings`
 
-The app routes are prepared as protected areas, but no hard auth guard is enforced until real Cognito integration is implemented.
+The app routes use `AuthGuard`. Without an active session, users are redirected to `/login?redirect=...`. Cognito can be enabled with `NEXT_PUBLIC_USE_MOCK_AUTH=false`; local mock auth remains available for development.
 
 ## Phase 2 Contract Dashboard
 
@@ -75,12 +134,12 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:3000/api
 
 ## Phase 6 Auth Foundation
 
-The web auth boundary is prepared without real authentication:
+The web auth boundary is prepared through a service abstraction:
 
-- `apps/web/src/services/auth` defines `AuthService`, `MockAuthService`, and a future `CognitoAuthService`.
-- `/login` and `/register` use mock flows only.
-- The dashboard header includes a mock user avatar and sign-out action.
-- API client auth helpers can attach a bearer header later, but no real token is created in this phase.
+- `apps/web/src/services/auth` defines `AuthService`, `MockAuthService`, and `CognitoAuthService`.
+- `/login` and `/register` support the Cognito-ready flow when `NEXT_PUBLIC_USE_MOCK_AUTH=false`.
+- App routes use `AuthGuard` and redirect unauthenticated users to `/login`.
+- API client auth helpers can attach bearer headers for the deployed API boundary.
 
 ## Phase 3 Contract Backend Foundation
 
