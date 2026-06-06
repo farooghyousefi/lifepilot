@@ -16,13 +16,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     let isMounted = true;
 
     authService
-      .isAuthenticated()
-      .then((authenticated) => {
+      .refreshSessionIfNeeded()
+      .then((session) => {
         if (!isMounted) {
           return;
         }
 
-        if (authenticated) {
+        if (session) {
           setIsAllowed(true);
           return;
         }
@@ -31,7 +31,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
         const redirectTarget = `${pathname}${query}`;
 
         router.replace(
-          `/login?redirect=${encodeURIComponent(redirectTarget)}`,
+          `/login?expired=1&redirect=${encodeURIComponent(redirectTarget)}`,
         );
       })
       .finally(() => {
@@ -56,7 +56,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
             Sitzung wird geprüft
           </h1>
           <p className="mt-2 text-[14px] font-semibold leading-6 text-[#667085]">
-            Wir prüfen kurz, ob du angemeldet bist.
+            Sitzung wird geprüft...
           </p>
         </div>
       </div>

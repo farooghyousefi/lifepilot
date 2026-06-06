@@ -9,7 +9,7 @@ export function createOcrExtractionPlaceholder(
   summary: string;
 } {
   return {
-    errorMessage: "Foto/OCR kommt als nächster Schritt.",
+    errorMessage: "Foto-/Scan-Erkennung ist vorbereitet, aber noch nicht aktiv.",
     extractedText: {
       confidence: "low",
       extractedAt,
@@ -18,6 +18,6 @@ export function createOcrExtractionPlaceholder(
     },
     status: "unsupported",
     summary:
-      "Bilddatei wurde erkannt. OCR für Briefe, Fotos und Scans ist vorbereitet, aber noch nicht implementiert.",
+      "Bilddatei wurde erkannt. Foto-/Scan-Erkennung ist vorbereitet, aber noch nicht aktiv.",
   };
 }

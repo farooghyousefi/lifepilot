@@ -1,5 +1,6 @@
 import { clearAuthToken, setAuthToken } from "@lifepilot/api-client";
 import { Amplify } from "aws-amplify";
+import "aws-amplify/auth/enable-oauth-listener";
 import {
   confirmResetPassword,
   confirmSignUp,
@@ -8,6 +9,7 @@ import {
   resendSignUpCode,
   resetPassword,
   signIn,
+  signInWithRedirect,
   signOut,
   signUp,
 } from "aws-amplify/auth";
@@ -22,6 +24,8 @@ import type {
   RegisterInput,
   ResendConfirmationCodeInput,
   SignInInput,
+  SocialLoginAvailability,
+  SocialLoginProvider,
   SignUpInput,
   SignUpResult,
 } from "./auth-service";
@@ -37,15 +41,26 @@ function configureAmplify() {
   }
 
   const userPoolId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID;
-  const userPoolClientId = process.env.NEXT_PUBLIC_COGNITO_USER_POOL_CLIENT_ID;
+  const userPoolClientId =
+    process.env.NEXT_PUBLIC_COGNITO_USER_POOL_CLIENT_ID ??
+    process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID;
 
   if (!userPoolId || !userPoolClientId) {
     throw new Error("Missing Cognito environment variables.");
   }
 
+  const hostedUiConfig = getHostedUiConfig();
+
   Amplify.configure({
     Auth: {
       Cognito: {
+        ...(hostedUiConfig
+          ? {
+              loginWith: {
+                oauth: hostedUiConfig,
+              },
+            }
+          : {}),
         userPoolId,
         userPoolClientId,
       },
@@ -175,10 +190,60 @@ export class CognitoAuthService implements AuthService {
   }
 
   async signOut(): Promise<void> {
-    await signOut();
+    const redirectUrl = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_SIGN_OUT;
+
+    await signOut(
+      redirectUrl && getHostedUiConfig()
+        ? {
+            global: false,
+            oauth: {
+              redirectUrl,
+            },
+          }
+        : undefined,
+    );
     cachedSession = null;
     cachedSessionAt = 0;
     clearAuthToken();
+  }
+
+  getSocialLoginAvailability(): SocialLoginAvailability {
+    const isHostedUiConfigured = Boolean(getHostedUiConfig());
+
+    return {
+      apple: isHostedUiConfigured,
+      google: isHostedUiConfigured,
+      isHostedUiConfigured,
+    };
+  }
+
+  async startAppleLogin(): Promise<void> {
+    await this.startSocialLogin("apple");
+  }
+
+  async startGoogleLogin(): Promise<void> {
+    await this.startSocialLogin("google");
+  }
+
+  async handleOAuthCallback(): Promise<AuthSession> {
+    if (!getHostedUiConfig()) {
+      throw new Error("Diese Anmeldemethode ist noch nicht aktiviert.");
+    }
+
+    const session = await this.refreshSessionIfNeeded();
+
+    if (!session) {
+      throw new Error("Anmeldung konnte nicht abgeschlossen werden.");
+    }
+
+    return session;
+  }
+
+  async refreshSessionIfNeeded(): Promise<AuthSession | null> {
+    cachedSession = null;
+    cachedSessionAt = 0;
+
+    return this.getCurrentSession();
   }
 
   async getCurrentSession(): Promise<AuthSession | null> {
@@ -210,6 +275,7 @@ export class CognitoAuthService implements AuthService {
               Number(session.tokens.accessToken.payload.exp) * 1000,
             ).toISOString()
           : undefined,
+        loginMethod: detectLoginMethod(currentUser.signInDetails?.loginId),
         provider: "cognito",
         user: createUserFromEmail(email, currentUser.userId),
       };
@@ -235,6 +301,73 @@ export class CognitoAuthService implements AuthService {
     const user = await this.getCurrentUser();
     return Boolean(user);
   }
+
+  private async startSocialLogin(provider: SocialLoginProvider): Promise<void> {
+    if (!getHostedUiConfig()) {
+      throw new Error("Diese Anmeldemethode ist noch nicht aktiviert.");
+    }
+
+    await signInWithRedirect({
+      provider: provider === "google" ? "Google" : "Apple",
+      options: {
+        lang: "de",
+      },
+    });
+  }
+}
+
+function getHostedUiConfig():
+  | {
+      domain: string;
+      redirectSignIn: string[];
+      redirectSignOut: string[];
+      responseType: "code";
+      scopes: string[];
+    }
+  | undefined {
+  const domain = process.env.NEXT_PUBLIC_COGNITO_DOMAIN;
+  const redirectSignIn = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_SIGN_IN;
+  const redirectSignOut = process.env.NEXT_PUBLIC_COGNITO_REDIRECT_SIGN_OUT;
+
+  if (!domain || !redirectSignIn || !redirectSignOut) {
+    return undefined;
+  }
+
+  return {
+    domain,
+    redirectSignIn: splitEnvList(redirectSignIn),
+    redirectSignOut: splitEnvList(redirectSignOut),
+    responseType: "code",
+    scopes: splitEnvList(
+      process.env.NEXT_PUBLIC_COGNITO_OAUTH_SCOPES ??
+        "openid,email,profile",
+    ),
+  };
+}
+
+function splitEnvList(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function detectLoginMethod(loginId?: string): AuthSession["loginMethod"] {
+  if (!loginId) {
+    return "email";
+  }
+
+  const normalizedLoginId = loginId.toLowerCase();
+
+  if (normalizedLoginId.includes("google")) {
+    return "google";
+  }
+
+  if (normalizedLoginId.includes("apple")) {
+    return "apple";
+  }
+
+  return "email";
 }
 
 function isCachedSessionUsable(): boolean {

@@ -10,7 +10,7 @@ export type LifeArea =
 
 export type Priority = "low" | "medium" | "high";
 
-export type AuthProvider = "mock" | "cognito";
+export type AuthProvider = "mock" | "cognito" | "google" | "apple";
 
 export type UserRole = "user" | "admin";
 
@@ -130,6 +130,7 @@ export type AnalysisStatus =
 
 export type ExtractedTextSource =
   | "browser-text-file"
+  | "browser-pdf-text"
   | "browser-pdf-placeholder"
   | "ocr-placeholder"
   | "ai-provider-placeholder";
@@ -152,6 +153,35 @@ export type PersistenceStatus =
   | "backend-prepared"
   | "backend-saved"
   | "backend-failed";
+
+export type DocumentIntent =
+  | "employment_termination"
+  | "invoice"
+  | "contract"
+  | "insurance"
+  | "authority_letter"
+  | "identity_document"
+  | "general_document";
+
+export type BrainRiskLevel = "low" | "medium" | "high";
+
+export type BrainConfidence = "low" | "medium" | "high";
+
+export type BrainProviderStatus =
+  | "active"
+  | "fallback"
+  | "not_configured"
+  | "error"
+  | "invalid_output";
+
+export type BrainProvider = "deterministic" | "openai";
+
+export type BrainActionType =
+  | "create_reminder"
+  | "create_task"
+  | "save_document"
+  | "save_contract"
+  | "review_details";
 
 export type ContractSource =
   | "document-analysis"
@@ -220,6 +250,74 @@ export interface MissingFact {
 
 export interface MissingContractFact extends MissingFact {
   source?: ContractSource;
+}
+
+export interface BrainSourceEvidence {
+  dateIso?: ISODateString;
+  field?: string;
+  label: string;
+  snippet?: string;
+}
+
+export interface BrainFinding {
+  label: string;
+  sourceEvidence?: BrainSourceEvidence;
+  value: string;
+}
+
+export interface BrainAction {
+  explanation: string;
+  label: string;
+  requiresConfirmation: true;
+  sourceEvidence?: BrainSourceEvidence;
+  suggestedDate?: ISODateString;
+  type: BrainActionType;
+}
+
+export interface BrainQuestion {
+  id: string;
+  label: string;
+  placeholder?: string;
+  question: string;
+  required: boolean;
+  sourceEvidence?: BrainSourceEvidence;
+}
+
+export interface HiddenDocumentDetail {
+  label: string;
+  section:
+    | "raw_text"
+    | "all_dates"
+    | "all_facts"
+    | "technical"
+    | "source_evidence";
+  value: string;
+}
+
+export interface DocumentBrainInput {
+  deterministicDates: DetectedDeadline[];
+  deterministicFacts?: ExtractedDocumentFacts;
+  extractedText?: string;
+  filename?: string;
+  locale: "de-DE";
+  mimeType?: string;
+}
+
+export interface DocumentBrainResult {
+  confidence: BrainConfidence;
+  hiddenDetails: HiddenDocumentDetail[];
+  importantFindings: BrainFinding[];
+  intent: DocumentIntent;
+  needsUserConfirmation: boolean;
+  optionalQuestion?: BrainQuestion;
+  primaryButtons: BrainAction[];
+  provider: BrainProvider;
+  providerStatus: BrainProviderStatus;
+  recommendedAction: BrainAction;
+  riskLevel: BrainRiskLevel;
+  simpleSummary: string;
+  sourceEvidence: BrainSourceEvidence[];
+  title: string;
 }
 
 export interface ManagedPersonProfile {
@@ -364,6 +462,7 @@ export interface AuthSession {
   provider: AuthProvider;
   expiresAt?: ISODateString;
   accessToken?: string;
+  loginMethod?: "email" | "google" | "apple" | "development";
 }
 
 export interface Reminder {
@@ -449,6 +548,8 @@ export interface Document {
   sizeBytes?: number;
   s3Key?: string;
   uploadStatus?: DocumentUploadStatus;
+  autoNamed?: boolean;
+  namingConfidence?: FactConfidence;
 }
 
 export interface CreateDocumentInput {
@@ -459,6 +560,8 @@ export interface CreateDocumentInput {
   fileName?: string;
   contentType?: string;
   sizeBytes?: number;
+  autoNamed?: boolean;
+  namingConfidence?: FactConfidence;
 }
 
 export interface RequestDocumentUploadInput {
@@ -469,6 +572,8 @@ export interface RequestDocumentUploadInput {
   contentType: string;
   sizeBytes: number;
   notes?: string;
+  autoNamed?: boolean;
+  namingConfidence?: FactConfidence;
 }
 
 export interface RequestDocumentUploadResult {

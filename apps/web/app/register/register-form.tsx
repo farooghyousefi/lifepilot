@@ -204,18 +204,18 @@ export function RegisterForm() {
             {[
               {
                 icon: ShieldCheck,
-                text: "Cognito Auth",
+                text: "Cognito Anmeldung",
                 title: "Sicherer Zugang",
               },
               {
                 icon: LockKeyhole,
                 text: "Passwort nie lokal speichern",
-                title: "Privacy First",
+                title: "Datenschutz zuerst",
               },
               {
                 icon: Sparkles,
                 text: "Direkt produktnah nutzbar",
-                title: "Modern UX",
+                title: "Einfache Nutzung",
               },
             ].map(({ icon: Icon, text, title }) => (
               <article

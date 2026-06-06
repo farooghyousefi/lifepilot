@@ -136,50 +136,50 @@ const mockContracts: Contract[] = [
 const mockDocuments: Document[] = [
   {
     id: "document-vodafone-contract",
-    name: "Vodafone Contract",
+    name: "Vodafone Vertrag",
     category: "contracts",
     status: "linked-to-contract",
     addedAt: "2026-05-26T09:00:00.000Z",
     linkedContract: "Vodafone Internet",
-    securityNote: "Demo metadata only. No real document is stored.",
-    recommendedAction: "Review cancellation window before Aug 30.",
+    securityNote: "Demo-Metadaten. Es ist kein echtes Dokument gespeichert.",
+    recommendedAction: "Prüfe die Kündigungsfrist vor dem 30. August.",
   },
   {
     id: "document-axa-insurance-policy",
-    name: "AXA Insurance Policy",
+    name: "AXA Versicherung",
     category: "insurance",
     status: "needs-review",
     addedAt: "2026-05-23T10:00:00.000Z",
-    securityNote: "Ready for future private S3 storage.",
-    recommendedAction: "Check coverage and renewal date.",
+    securityNote: "Für spätere private S3-Speicherung vorbereitet.",
+    recommendedAction: "Prüfe Schutzumfang und Verlängerungsdatum.",
   },
   {
     id: "document-electricity-bill",
-    name: "Electricity Bill",
+    name: "Stromrechnung",
     category: "bills",
     status: "expiring-soon",
     addedAt: "2026-05-18T12:30:00.000Z",
     linkedContract: "Stromvertrag",
-    securityNote: "Demo metadata only. Avoid real bill uploads.",
-    recommendedAction: "Compare a better energy offer this week.",
+    securityNote: "Demo-Metadaten. Bitte noch keine echten Rechnungen hochladen.",
+    recommendedAction: "Prüfe diese Woche, ob ein besserer Stromtarif sinnvoll ist.",
   },
   {
     id: "document-tax-notice",
-    name: "Tax Notice",
+    name: "Steuerbescheid",
     category: "finance",
     status: "protected",
     addedAt: "2026-05-12T08:15:00.000Z",
-    securityNote: "Prepared for encryption and user isolation.",
-    recommendedAction: "Move to vault when real storage is enabled.",
+    securityNote: "Für Verschlüsselung und Nutzertrennung vorbereitet.",
+    recommendedAction: "Später in den Tresor verschieben, wenn echte Speicherung aktiv ist.",
   },
   {
     id: "document-id-copy-placeholder",
-    name: "ID Copy Placeholder",
+    name: "Ausweis Platzhalter",
     category: "identity",
     status: "protected",
     addedAt: "2026-05-02T11:45:00.000Z",
-    securityNote: "Placeholder only. Do not upload identity documents yet.",
-    recommendedAction: "Use demo data until Cognito and KMS are active.",
+    securityNote: "Nur Platzhalter. Bitte noch keine Ausweisdokumente hochladen.",
+    recommendedAction: "Nutze Demo-Daten, bis Cognito und KMS produktiv aktiv sind.",
   },
 ];
 
@@ -384,10 +384,13 @@ const createMockDocument = (input: CreateDocumentInput): Document => {
     category: input.category,
     status: input.status,
     addedAt: new Date().toISOString(),
+    autoNamed: input.autoNamed,
+    namingConfidence: input.namingConfidence,
     notes: input.notes,
     uploadStatus: "metadata-only",
-    securityNote: "Metadata-only mock document. No file is attached.",
-    recommendedAction: "Review this document and attach a file when needed.",
+    securityNote:
+      "Lokaler Entwicklungsmodus: Es wurde keine echte Datei produktiv gespeichert.",
+    recommendedAction: "Nächster Schritt: Angaben prüfen.",
   };
 
   mockRuntimeDocuments.unshift(document);
@@ -406,6 +409,8 @@ const createMockUploadRequest = (
     category: input.category,
     status: input.status,
     addedAt: new Date().toISOString(),
+    autoNamed: input.autoNamed,
+    namingConfidence: input.namingConfidence,
     notes: input.notes,
     fileName: input.fileName,
     contentType: input.contentType,
@@ -413,8 +418,8 @@ const createMockUploadRequest = (
     s3Key: `mock/users/mock-user/documents/${documentId}/${safeFileName}`,
     uploadStatus: "upload-pending",
     securityNote:
-      "Mock upload request created. Real mode uploads directly to private S3.",
-    recommendedAction: "Complete the mock upload flow and review the document.",
+      "Lokaler Entwicklungsmodus: Der Upload ist vorbereitet; produktive Speicherung braucht das Backend.",
+    recommendedAction: "Nächster Schritt: Angaben prüfen.",
   };
 
   mockRuntimeDocuments.unshift(document);
@@ -441,9 +446,9 @@ const completeMockDocumentUpload = (
 
   document.uploadStatus = "uploaded";
   document.securityNote =
-    "Mock upload completed. Real mode stores the file in private S3.";
+    "Lokaler Entwicklungsmodus: Die Datei wurde nicht produktiv in S3 gespeichert.";
   document.recommendedAction =
-    "Review this uploaded document and link it to the right record.";
+    "Nächster Schritt: Angaben prüfen.";
 
   return { document: { ...document } };
 };
