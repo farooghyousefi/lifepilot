@@ -171,13 +171,16 @@ export const createLocalDocument = (
   const documentId = `document-local-${Date.now()}`;
   const document: Document = {
     addedAt: new Date().toISOString(),
+    autoNamed: input.autoNamed,
     category: input.category,
     id: documentId,
     name: input.name,
+    namingConfidence: input.namingConfidence,
     notes: input.notes,
     recommendedAction:
-      "Review this local API demo item before connecting real storage.",
-    securityNote: "Local API demo only. No real file was uploaded or stored.",
+      "Nächster Schritt: Angaben prüfen.",
+    securityNote:
+      "Lokaler Entwicklungsmodus: Es wurde keine echte Datei produktiv gespeichert.",
     status: input.status,
   };
 

@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Bell,
-  Camera,
   CheckCircle2,
   ClipboardCheck,
   CreditCard,
@@ -43,20 +42,13 @@ const quickActions: Array<{
   status?: string;
 }> = [
   {
-    description: "PDF, TXT oder Bild als neues Dokument erfassen.",
+    description: "Datei hochladen und LifePilot den Rest vorbereiten lassen.",
     href: "/documents",
     icon: Upload,
     label: "Dokument hochladen",
   },
   {
-    description: "Foto/OCR ist vorbereitet und kommt als nächster Schritt.",
-    href: "/documents",
-    icon: Camera,
-    label: "Brief fotografieren",
-    status: "OCR kommt",
-  },
-  {
-    description: "Erkannte Datumsangaben prüfen und bestätigen.",
+    description: "Dokumente ansehen, bei denen etwas geprüft werden sollte.",
     href: "/documents",
     icon: SearchCheck,
     label: "Frist prüfen",
@@ -81,12 +73,12 @@ const lifePilotLoop = [
     text: "Du lädst einen Brief, Vertrag oder eine Rechnung hoch.",
   },
   {
-    label: "LifePilot liest es",
-    text: "TXT wird lokal gelesen. PDF und Foto/OCR sind vorbereitet.",
+    label: "LifePilot bereitet vor",
+    text: "TXT wird lokal gelesen. PDF und Foto-/Scan-Erkennung sind vorbereitet.",
   },
   {
-    label: "Wichtiges wird erkannt",
-    text: "LifePilot findet mögliche Fristen und relevante Datumsstellen.",
+    label: "Wichtiges erscheint",
+    text: "Mögliche Fristen und Angaben werden ruhig zur Prüfung angezeigt.",
   },
   {
     label: "Du bestätigst",
@@ -107,7 +99,7 @@ export function DashboardClient() {
   );
 
   useEffect(() => {
-    setAnalyses(readStoredDocumentAnalyses());
+    setAnalyses(asArray(readStoredDocumentAnalyses()));
 
     async function loadMemory() {
       const [contractResult, reminderResult] = await Promise.all([
@@ -115,8 +107,8 @@ export function DashboardClient() {
         listPersistedReminders(),
       ]);
 
-      setContracts(contractResult.data);
-      setReminders(reminderResult.data);
+      setContracts(asArray(contractResult.data));
+      setReminders(asArray(reminderResult.data));
       setPersistenceMessage(
         contractResult.status === "backend-saved" ||
           reminderResult.status === "backend-saved"
@@ -128,9 +120,13 @@ export function DashboardClient() {
     void loadMemory();
   }, []);
 
+  const safeAnalyses = useMemo(() => asArray(analyses), [analyses]);
+  const safeContracts = useMemo(() => asArray(contracts), [contracts]);
+  const safeReminders = useMemo(() => asArray(reminders), [reminders]);
+
   const openReminders = useMemo(
-    () => reminders.filter((reminder) => reminder.status !== "done"),
-    [reminders],
+    () => safeReminders.filter((reminder) => reminder.status !== "done"),
+    [safeReminders],
   );
   const overdueReminders = useMemo(
     () =>
@@ -142,32 +138,37 @@ export function DashboardClient() {
 
   const documentsForReview = useMemo(
     () =>
-      analyses.filter(
+      safeAnalyses.filter(
         (analysis) =>
           analysis.status === "failed" ||
           analysis.status === "unsupported" ||
-          analysis.detectedDeadlines.length > 0,
+          asArray(analysis.detectedDeadlines).length > 0 ||
+          asArray(analysis.detectedActions).length > 0,
       ),
-    [analyses],
+    [safeAnalyses],
   );
   const missingFacts = useMemo(
     () =>
-      contracts.flatMap((contract) =>
-        contract.missingFacts.map((missingFact) => ({
+      safeContracts.flatMap((contract) =>
+        asArray(contract.missingFacts).map((missingFact) => ({
           contract,
           missingFact,
         })),
       ),
-    [contracts],
+    [safeContracts],
   );
   const cancellationSoonContracts = useMemo(
     () =>
-      contracts.filter(
+      safeContracts.filter(
         (contract) =>
           contract.lifecycleStatus === "cancellable-now" ||
           contract.lifecycleStatus === "cancellation-window-upcoming",
       ),
-    [contracts],
+    [safeContracts],
+  );
+  const agentSuggestions = useMemo(
+    () => buildAgentSuggestions(safeContracts),
+    [safeContracts],
   );
 
   const summaryCards = [
@@ -187,7 +188,7 @@ export function DashboardClient() {
       icon: CheckCircle2,
       label: "Verträge",
       meta: "Unter Beobachtung",
-      value: String(contracts.length),
+      value: String(safeContracts.length),
       visual: "chart",
     },
     {
@@ -218,24 +219,23 @@ export function DashboardClient() {
   return (
     <LifePilotShell activeItem="Dashboard">
       <PageHeader
-        eyebrow="Command Center"
-        subtitle="Dein Überblick über Dokumente, Fristen, Verträge und nächste Schritte."
-        title="LifePilot Command Center"
+        eyebrow="Dashboard"
+        subtitle="Dokumente hochladen und LifePilot den Rest vorbereiten lassen."
+        title="Dein Überblick"
       />
 
-      <section className="mt-6 rounded-[20px] border border-[#FDECCB] bg-[#FFF7EA] p-5">
+      <section className="mt-6 rounded-[20px] border border-[#FDECCB] bg-[#FFF7EA] p-4 sm:p-5">
         <div className="flex items-start gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white text-[#D98806]">
             <AlertTriangle className="size-5" aria-hidden="true" />
           </div>
-          <div>
-            <p className="text-[15px] font-bold text-[#101828]">
+          <div className="min-w-0">
+            <p className="break-words text-[15px] font-bold text-[#101828]">
               {persistenceMessage}
             </p>
-            <p className="mt-1 text-[13px] font-semibold leading-6 text-[#667085]">
-              Das ist bewusst ehrlich: produktive Speicherung,
-              geräteübergreifende Synchronisierung und sichere Reminder im
-              Backend brauchen ein AWS Deployment und Live-Validierung.
+            <p className="mt-1 break-words text-[13px] font-semibold leading-6 text-[#667085]">
+              Deine lokale Ansicht bleibt nutzbar. Für produktive Speicherung
+              und geräteübergreifende Nutzung braucht LifePilot später das Backend.
             </p>
           </div>
         </div>
@@ -255,23 +255,23 @@ export function DashboardClient() {
         ))}
       </section>
 
-      <section className="mt-7 rounded-[22px] border border-[#ECEFEB] bg-white p-5 shadow-card sm:p-6">
+      <section className="mt-7 rounded-[22px] border border-[#ECEFEB] bg-white p-4 shadow-card sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-xl font-bold tracking-normal text-[#101828]">
-              Schnellaktionen
+          <div className="min-w-0">
+            <h2 className="break-words text-xl font-bold tracking-normal text-[#101828]">
+              Nächste empfohlene Schritte
             </h2>
-            <p className="mt-1 text-[13px] font-semibold leading-6 text-[#667085]">
-              Starte dort, wo normale Verwaltung meistens beginnt: mit einem
-              Dokument, einer Frist oder einem Vertrag.
+            <p className="mt-1 break-words text-[13px] font-semibold leading-6 text-[#667085]">
+              Starte mit einem Dokument. LifePilot bereitet Name, Prüfung und
+              mögliche nächste Schritte vor.
             </p>
           </div>
-          <span className="inline-flex w-fit items-center rounded-full bg-[#EAF7F0] px-3 py-1 text-[12px] font-bold text-[#2FA779]">
-            Kein AI-Provider aktiv
+          <span className="inline-flex w-fit max-w-full items-center rounded-full bg-[#EAF7F0] px-3 py-1 text-[12px] font-bold text-[#2FA779]">
+            Einfacher Upload aktiv
           </span>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {quickActions.map((action) => (
             <QuickActionCard key={action.label} {...action} />
           ))}
@@ -280,21 +280,21 @@ export function DashboardClient() {
 
       <DocumentIntelligenceSummary />
 
-      {contracts.length === 0 && reminders.length === 0 ? (
-        <section className="mt-7 rounded-[22px] border border-[#ECEFEB] bg-white p-6 shadow-card">
-          <p className="text-[16px] font-bold text-[#101828]">
+      {safeContracts.length === 0 && safeReminders.length === 0 ? (
+        <section className="mt-7 rounded-[22px] border border-[#ECEFEB] bg-white p-4 shadow-card sm:p-6">
+          <p className="break-words text-[16px] font-bold text-[#101828]">
             Noch keine gespeicherten Verträge oder Erinnerungen. Lade ein
             Dokument hoch oder erstelle eine Erinnerung manuell.
           </p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
             <Link
-              className="inline-flex justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white"
+              className="inline-flex w-full justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white sm:w-auto"
               href="/documents"
             >
               Dokument hochladen
             </Link>
             <Link
-              className="inline-flex justify-center rounded-xl border border-[#ECEFEB] bg-white px-4 py-3 text-[13px] font-bold text-[#344054]"
+              className="inline-flex w-full justify-center rounded-xl border border-[#ECEFEB] bg-white px-4 py-3 text-[13px] font-bold text-[#344054] sm:w-auto"
               href="/reminders"
             >
               Erinnerung erstellen
@@ -321,7 +321,7 @@ export function DashboardClient() {
             <EmptyState text="Noch keine offenen Erinnerungen." />
           )}
           <Link
-            className="mt-4 inline-flex items-center justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866]"
+            className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866] sm:w-auto"
             href="/reminders"
           >
             Erinnerungen öffnen
@@ -346,7 +346,7 @@ export function DashboardClient() {
       <section className="mt-7 grid gap-5 xl:grid-cols-[1fr_0.9fr]">
         <CommandPanel
           icon={ClipboardCheck}
-          title="Dokumente zur Prüfung"
+          title="Wartet auf Prüfung"
           tone="orange"
         >
           {documentsForReview.length > 0 ? (
@@ -362,27 +362,23 @@ export function DashboardClient() {
           )}
         </CommandPanel>
 
-        <CommandPanel
-          icon={CreditCard}
-          title="Verträge und Kündigungen"
-          tone="green"
-        >
-          {contracts.length > 0 ? (
-            contracts.slice(0, 4).map((contract) => (
+        <CommandPanel icon={CreditCard} title="Zuletzt hochgeladen" tone="green">
+          {safeAnalyses.length > 0 ? (
+            safeAnalyses.slice(0, 4).map((analysis) => (
               <StatusRow
-                key={contract.id}
-                meta={formatContractMeta(contract)}
-                title={contract.provider ?? contract.name}
+                key={analysis.documentId}
+                meta={formatAnalysisMeta(analysis)}
+                title={analysis.documentName ?? "Unbenanntes Dokument"}
               />
             ))
           ) : (
-            <EmptyState text="Noch kein Vertrag gespeichert. Prüfe ein Dokument und speichere es als Vertrag." />
+            <EmptyState text="Noch kein Dokument hochgeladen." />
           )}
           <Link
-            className="mt-4 inline-flex items-center justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866]"
-            href="/contracts"
+            className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866] sm:w-auto"
+            href="/documents"
           >
-            Verträge öffnen
+            Dokumente öffnen
           </Link>
         </CommandPanel>
       </section>
@@ -406,9 +402,13 @@ export function DashboardClient() {
           )}
         </CommandPanel>
 
-        <CommandPanel icon={FileSearch} title="Agent-Vorschläge" tone="green">
-          {buildAgentSuggestions(contracts).length > 0 ? (
-            buildAgentSuggestions(contracts).map((suggestion) => (
+        <CommandPanel
+          icon={FileSearch}
+          title="Nächste empfohlene Schritte"
+          tone="green"
+        >
+          {agentSuggestions.length > 0 ? (
+            agentSuggestions.map((suggestion) => (
               <StatusRow
                 key={suggestion}
                 meta="Nur Vorschlag. LifePilot führt nichts automatisch aus."
@@ -421,16 +421,16 @@ export function DashboardClient() {
         </CommandPanel>
       </section>
 
-      <section className="mt-7 rounded-[22px] border border-life-border bg-white p-5 shadow-card sm:p-6">
-        <div className="flex items-center gap-3">
+      <section className="mt-7 rounded-[22px] border border-life-border bg-white p-4 shadow-card sm:p-6">
+        <div className="flex min-w-0 items-start gap-3 sm:items-center">
           <div className="flex size-12 items-center justify-center rounded-2xl bg-[#EAF7F0] text-[#2FA779]">
             <FolderOpen className="size-6" aria-hidden="true" />
           </div>
-          <div>
-            <h2 className="text-xl font-bold tracking-normal text-[#101828]">
+          <div className="min-w-0">
+            <h2 className="break-words text-xl font-bold tracking-normal text-[#101828]">
               So arbeitet LifePilot
             </h2>
-            <p className="mt-1 text-[13px] font-semibold leading-6 text-[#667085]">
+            <p className="mt-1 break-words text-[13px] font-semibold leading-6 text-[#667085]">
               Der Ablauf ist bewusst geführt, damit Nutzer nichts Technisches
               verstehen müssen.
             </p>
@@ -440,16 +440,16 @@ export function DashboardClient() {
         <div className="mt-5 grid gap-3 lg:grid-cols-5">
           {lifePilotLoop.map((step, index) => (
             <article
-              className="rounded-[18px] border border-[#ECEFEB] bg-[#FCFBFA] p-4"
+              className="min-w-0 rounded-[18px] border border-[#ECEFEB] bg-[#FCFBFA] p-4"
               key={step.label}
             >
               <div className="flex size-9 items-center justify-center rounded-full bg-white text-[13px] font-bold text-[#2FA779] shadow-button">
                 {index + 1}
               </div>
-              <h3 className="mt-4 text-[15px] font-bold text-[#101828]">
+              <h3 className="mt-4 break-words text-[15px] font-bold text-[#101828]">
                 {step.label}
               </h3>
-              <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
+              <p className="mt-2 break-words text-[13px] font-semibold leading-6 text-[#667085]">
                 {step.text}
               </p>
             </article>
@@ -474,30 +474,30 @@ function QuickActionCard({
   status?: string;
 }) {
   const content = (
-    <article className="h-full rounded-[18px] border border-[#ECEFEB] bg-[#FCFBFA] p-4 transition hover:border-[#D5EBDD] hover:bg-white">
+    <article className="h-full min-w-0 rounded-[18px] border border-[#ECEFEB] bg-[#FCFBFA] p-4 transition hover:border-[#D5EBDD] hover:bg-white">
       <div className="flex items-start justify-between gap-3">
         <div className="flex size-11 items-center justify-center rounded-2xl bg-white text-[#2FA779]">
           <Icon className="size-5" aria-hidden="true" />
         </div>
         {status ? (
-          <span className="rounded-full bg-[#FFF7EA] px-2.5 py-1 text-[11px] font-bold text-[#D98806]">
+          <span className="min-w-0 rounded-full bg-[#FFF7EA] px-2.5 py-1 text-[11px] font-bold text-[#D98806]">
             {status}
           </span>
         ) : null}
       </div>
-      <h3 className="mt-4 text-[15px] font-bold text-[#101828]">{label}</h3>
-      <p className="mt-2 text-[12px] font-semibold leading-5 text-[#667085]">
+      <h3 className="mt-4 break-words text-[15px] font-bold text-[#101828]">{label}</h3>
+      <p className="mt-2 break-words text-[12px] font-semibold leading-5 text-[#667085]">
         {description}
       </p>
     </article>
   );
 
   return href ? (
-    <Link className="block" href={href}>
+    <Link className="block min-w-0" href={href}>
       {content}
     </Link>
   ) : (
-    <button className="text-left" type="button">
+    <button className="w-full min-w-0 text-left" type="button">
       {content}
     </button>
   );
@@ -520,12 +520,12 @@ function CommandPanel({
       : "bg-[#FFF7EA] text-[#D98806]";
 
   return (
-    <section className="rounded-[22px] border border-[#ECEFEB] bg-white p-5 shadow-card sm:p-6">
-      <div className="flex items-center gap-3">
-        <div className={`flex size-12 items-center justify-center rounded-2xl ${toneClass}`}>
+    <section className="min-w-0 rounded-[22px] border border-[#ECEFEB] bg-white p-4 shadow-card sm:p-6">
+      <div className="flex min-w-0 items-start gap-3 sm:items-center">
+        <div className={`flex size-12 shrink-0 items-center justify-center rounded-2xl ${toneClass}`}>
           <Icon className="size-6" aria-hidden="true" />
         </div>
-        <h2 className="text-xl font-bold tracking-normal text-[#101828]">
+        <h2 className="min-w-0 break-words text-xl font-bold tracking-normal text-[#101828]">
           {title}
         </h2>
       </div>
@@ -537,8 +537,8 @@ function CommandPanel({
 function StatusRow({ meta, title }: { meta: string; title: string }) {
   return (
     <div className="py-4 first:pt-1 last:pb-1">
-      <p className="text-[15px] font-bold text-[#101828]">{title}</p>
-      <p className="mt-1 text-[13px] font-semibold leading-6 text-[#667085]">
+      <p className="break-words text-[15px] font-bold text-[#101828]">{title}</p>
+      <p className="mt-1 break-words text-[13px] font-semibold leading-6 text-[#667085]">
         {meta}
       </p>
     </div>
@@ -565,36 +565,24 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
-function formatContractMeta(contract: ContractRecord): string {
-  if (contract.missingFacts.length > 0) {
-    return `${contract.missingFacts.length} Pflichtangabe(n) fehlen.`;
-  }
-
-  if (contract.brain.nextImportantDate) {
-    return `Nächste wichtige Frist: ${new Date(
-      contract.brain.nextImportantDate,
-    ).toLocaleDateString("de-DE")}.`;
-  }
-
-  return "Vertrag vollständig erfasst, aber ohne nächste Frist.";
-}
-
 function buildAgentSuggestions(contracts: ContractRecord[]): string[] {
-  return contracts
+  return asArray(contracts)
     .flatMap((contract) => {
-      if (contract.missingFacts.length > 0) {
-        return `${contract.provider ?? contract.name}: ${contract.missingFacts[0].label} fehlt - bitte ergänzen.`;
+      const missingFacts = asArray(contract.missingFacts);
+
+      if (missingFacts.length > 0) {
+        return `${contract.provider ?? contract.name}: ${missingFacts[0].label} fehlt - bitte ergänzen.`;
       }
 
-      if (contract.brain.recommendedAction === "cancellation-draft-ready") {
+      if (contract.brain?.recommendedAction === "cancellation-draft-ready") {
         return `${contract.provider ?? contract.name}: Kündigung vorbereiten, sobald du die Angaben geprüft hast.`;
       }
 
-      if (contract.category === "insurance" && contract.dates.cancellationDate) {
+      if (contract.category === "insurance" && contract.dates?.cancellationDate) {
         return `${contract.provider ?? contract.name}: Kündigungsfrist erkannt, bitte prüfen.`;
       }
 
-      if (contract.category === "authority" && contract.dates.dueDate) {
+      if (contract.category === "authority" && contract.dates?.dueDate) {
         return `${contract.provider ?? contract.name}: Frist erkannt, Antwort vorbereiten.`;
       }
 
@@ -604,8 +592,15 @@ function buildAgentSuggestions(contracts: ContractRecord[]): string[] {
 }
 
 function formatAnalysisMeta(analysis: DocumentAnalysis): string {
-  if (analysis.detectedDeadlines.length > 0) {
-    return `${analysis.detectedDeadlines.length} mögliche Frist(en) erkannt. Bitte prüfen und bestätigen.`;
+  const detectedDeadlines = asArray(analysis.detectedDeadlines);
+  const detectedActions = asArray(analysis.detectedActions);
+
+  if (detectedActions.length > 0) {
+    return `${detectedActions.length} mögliche Aktion(en) erkannt. Bitte prüfen und bestätigen.`;
+  }
+
+  if (detectedDeadlines.length > 0) {
+    return `${detectedDeadlines.length} mögliche Frist(en) erkannt. Bitte prüfen und bestätigen.`;
   }
 
   if (analysis.status === "unsupported") {
@@ -623,4 +618,8 @@ function startOfDay(date: Date): Date {
   return new Date(
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
   );
+}
+
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }

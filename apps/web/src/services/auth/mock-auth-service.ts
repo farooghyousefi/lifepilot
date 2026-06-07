@@ -20,16 +20,15 @@ const demoUser: User = {
   role: "user",
 };
 
+const mockSessionStorageKey = "lifepilot:mock-auth-session:v1";
+
 export class MockAuthService implements AuthService {
-  private currentSession: AuthSession | null = {
-    accessToken: "mock-access-token",
-    provider: "mock",
-    user: demoUser,
-  };
+  private currentSession: AuthSession | null = readStoredMockSession();
 
   async signIn(input: SignInInput): Promise<AuthSession> {
     const session: AuthSession = {
       accessToken: "mock-access-token",
+      loginMethod: "development",
       provider: "mock",
       user: {
         ...demoUser,
@@ -39,6 +38,7 @@ export class MockAuthService implements AuthService {
     };
 
     this.currentSession = session;
+    storeMockSession(session);
     setAuthToken(session.accessToken ?? "");
 
     return session;
@@ -47,6 +47,7 @@ export class MockAuthService implements AuthService {
   async signUp(input: SignUpInput): Promise<SignUpResult> {
     const session: AuthSession = {
       accessToken: "mock-access-token",
+      loginMethod: "development",
       provider: "mock",
       user: {
         ...demoUser,
@@ -56,6 +57,7 @@ export class MockAuthService implements AuthService {
     };
 
     this.currentSession = session;
+    storeMockSession(session);
     setAuthToken(session.accessToken ?? "");
 
     return {
@@ -98,6 +100,7 @@ export class MockAuthService implements AuthService {
 
   async signOut(): Promise<void> {
     this.currentSession = null;
+    clearStoredMockSession();
     clearAuthToken();
   }
 
@@ -106,10 +109,72 @@ export class MockAuthService implements AuthService {
   }
 
   async getCurrentSession(): Promise<AuthSession | null> {
+    if (!this.currentSession) {
+      this.currentSession = readStoredMockSession();
+    }
+
+    if (this.currentSession?.accessToken) {
+      setAuthToken(this.currentSession.accessToken);
+    }
+
     return this.currentSession;
   }
 
   async isAuthenticated(): Promise<boolean> {
     return Boolean(this.currentSession);
   }
+
+  getSocialLoginAvailability() {
+    return {
+      apple: false,
+      google: false,
+      isHostedUiConfigured: false,
+    };
+  }
+
+  async startAppleLogin(): Promise<void> {
+    throw new Error("Apple Login ist vorbereitet, aber noch nicht aktiviert.");
+  }
+
+  async startGoogleLogin(): Promise<void> {
+    throw new Error("Google Login ist vorbereitet, aber noch nicht aktiviert.");
+  }
+
+  async handleOAuthCallback(): Promise<AuthSession> {
+    throw new Error("Diese Anmeldemethode ist noch nicht aktiviert.");
+  }
+
+  async refreshSessionIfNeeded(): Promise<AuthSession | null> {
+    return this.getCurrentSession();
+  }
+}
+
+function readStoredMockSession(): AuthSession | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(mockSessionStorageKey);
+
+    return rawValue ? (JSON.parse(rawValue) as AuthSession) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeMockSession(session: AuthSession): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(mockSessionStorageKey, JSON.stringify(session));
+}
+
+function clearStoredMockSession(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(mockSessionStorageKey);
 }

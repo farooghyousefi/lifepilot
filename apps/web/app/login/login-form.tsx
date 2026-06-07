@@ -6,9 +6,11 @@ import { useEffect, useState } from "react";
 import {
   ArrowRight,
   CheckCircle2,
+  Globe2,
   LockKeyhole,
   Mail,
   ShieldCheck,
+  Smartphone,
 } from "lucide-react";
 import type { User } from "@lifepilot/shared";
 
@@ -35,6 +37,7 @@ export function LoginForm() {
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const socialLoginAvailability = authService.getSocialLoginAvailability();
 
   useEffect(() => {
     const rememberedEmail = window.localStorage.getItem(lastEmailKey);
@@ -43,9 +46,15 @@ export function LoginForm() {
       setEmail(rememberedEmail);
     }
 
+    const searchParams = new URLSearchParams(window.location.search);
+
+    if (searchParams.get("expired") === "1") {
+      setError("Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.");
+    }
+
     authService
-      .getCurrentUser()
-      .then(setCurrentUser)
+      .refreshSessionIfNeeded()
+      .then((session) => setCurrentUser(session?.user ?? null))
       .finally(() => setIsCheckingUser(false));
   }, []);
 
@@ -93,6 +102,32 @@ export function LoginForm() {
         setError(getGermanAuthErrorMessage(authError));
       }
     } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const startSocialLogin = async (provider: "apple" | "google") => {
+    resetFeedback();
+
+    const isActive =
+      provider === "google"
+        ? socialLoginAvailability.google
+        : socialLoginAvailability.apple;
+
+    if (!isActive) {
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      if (provider === "google") {
+        await authService.startGoogleLogin();
+      } else {
+        await authService.startAppleLogin();
+      }
+    } catch (authError) {
+      setError(getGermanAuthErrorMessage(authError));
       setIsLoading(false);
     }
   };
@@ -240,35 +275,81 @@ export function LoginForm() {
           <Feedback error={error} message={message} />
 
           {mode === "login" ? (
-            <form className="mt-8 space-y-4" onSubmit={signIn}>
-              <EmailInput email={email} setEmail={setEmail} />
-              <PasswordInput
-                label="Passwort"
-                password={password}
-                placeholder="Dein Passwort"
-                setPassword={setPassword}
-              />
+            <>
+              <div className="mt-8 grid gap-3">
+                <SocialLoginButton
+                  icon={Globe2}
+                  isActive={socialLoginAvailability.google}
+                  label="Mit Google anmelden"
+                  onClick={() => startSocialLogin("google")}
+                  preparedText="Google Login ist vorbereitet, aber noch nicht aktiviert."
+                />
+                <SocialLoginButton
+                  icon={Smartphone}
+                  isActive={socialLoginAvailability.apple}
+                  label="Mit Apple anmelden"
+                  onClick={() => startSocialLogin("apple")}
+                  preparedText="Apple Login ist vorbereitet, aber noch nicht aktiviert."
+                />
+              </div>
 
-              <button
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#2FA779] px-4 py-3 text-[14px] font-bold text-white shadow-button transition hover:bg-[#258866] disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={isLoading}
-                type="submit"
-              >
-                {isLoading ? "Anmeldung läuft..." : "Anmelden"}
-                <ArrowRight className="size-4" aria-hidden="true" />
-              </button>
+              <div className="my-6 flex items-center gap-3">
+                <div className="h-px flex-1 bg-[#ECEFEB]" />
+                <span className="text-[12px] font-bold uppercase tracking-[0.08em] text-[#98A2B3]">
+                  Mit E-Mail anmelden
+                </span>
+                <div className="h-px flex-1 bg-[#ECEFEB]" />
+              </div>
 
-              <button
-                className="w-full text-center text-[13px] font-bold text-[#2FA779]"
-                onClick={() => {
+              <form className="space-y-4" onSubmit={signIn}>
+                <EmailInput email={email} setEmail={setEmail} />
+                <PasswordInput
+                  label="Passwort"
+                  password={password}
+                  placeholder="Dein Passwort"
+                  setPassword={setPassword}
+                />
+
+                <div className="rounded-[18px] border border-[#DDEFE6] bg-[#F2FAF6] p-4">
+                  <label className="flex items-start gap-3">
+                    <input
+                      checked
+                      className="mt-1 size-4 accent-[#2FA779]"
+                      readOnly
+                      type="checkbox"
+                    />
+                    <span>
+                      <span className="block text-[13px] font-bold text-[#101828]">
+                        Angemeldet bleiben
+                      </span>
+                      <span className="mt-1 block text-[12px] font-semibold leading-5 text-[#667085]">
+                        Du bleibst auf diesem Gerät angemeldet, bis du dich abmeldest.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
+                <button
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#2FA779] px-4 py-3 text-[14px] font-bold text-white shadow-button transition hover:bg-[#258866] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isLoading}
+                  type="submit"
+                >
+                  {isLoading ? "Anmeldung läuft..." : "Anmelden"}
+                  <ArrowRight className="size-4" aria-hidden="true" />
+                </button>
+              </form>
+
+              <LoginHelp
+                onForgotPassword={() => {
                   resetFeedback();
                   setMode("forgot-email");
                 }}
-                type="button"
-              >
-                Passwort vergessen?
-              </button>
-            </form>
+                onResendCode={() => {
+                  resetFeedback();
+                  setMode("confirm-signup");
+                }}
+              />
+            </>
           ) : null}
 
           {mode === "confirm-signup" ? (
@@ -401,7 +482,7 @@ function AuthScreen({
             <SecurityNote
               icon={LockKeyhole}
               text="Nur deine Session wird lokal genutzt"
-              title="Privacy First"
+              title="Datenschutz zuerst"
             />
           </div>
         </section>
@@ -506,6 +587,90 @@ function StatusBox({
     <div className={`mt-5 rounded-[18px] border px-4 py-3 text-[13px] font-bold ${className}`}>
       {text}
     </div>
+  );
+}
+
+function SocialLoginButton({
+  icon: Icon,
+  isActive,
+  label,
+  onClick,
+  preparedText,
+}: {
+  icon: typeof Globe2;
+  isActive: boolean;
+  label: string;
+  onClick: () => void;
+  preparedText: string;
+}) {
+  return (
+    <button
+      className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+        isActive
+          ? "border-[#DDEFE6] bg-white text-[#101828] hover:bg-[#F8FCFA]"
+          : "border-[#ECEFEB] bg-[#FCFBFA] text-[#667085]"
+      }`}
+      disabled={!isActive}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="flex items-center gap-3">
+        <span className="flex size-10 items-center justify-center rounded-2xl bg-white text-[#2FA779]">
+          <Icon className="size-5" aria-hidden="true" />
+        </span>
+        <span>
+          <span className="block text-[14px] font-bold">{label}</span>
+          {!isActive ? (
+            <>
+              <span className="mt-1 block text-[12px] font-bold text-[#D98806]">
+                bald verfügbar
+              </span>
+              <span className="mt-1 block text-[12px] font-semibold leading-5">
+                {preparedText}
+              </span>
+            </>
+          ) : null}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function LoginHelp({
+  onForgotPassword,
+  onResendCode,
+}: {
+  onForgotPassword: () => void;
+  onResendCode: () => void;
+}) {
+  return (
+    <section className="mt-6 rounded-[18px] border border-[#ECEFEB] bg-[#FCFBFA] p-4">
+      <h3 className="text-[14px] font-bold text-[#101828]">
+        Probleme beim Einloggen?
+      </h3>
+      <div className="mt-3 grid gap-2">
+        <button
+          className="text-left text-[13px] font-bold text-[#2FA779]"
+          onClick={onForgotPassword}
+          type="button"
+        >
+          Passwort vergessen
+        </button>
+        <button
+          className="text-left text-[13px] font-bold text-[#2FA779]"
+          onClick={onResendCode}
+          type="button"
+        >
+          Bestätigungscode erneut senden
+        </button>
+      </div>
+      <p className="mt-4 text-[13px] font-bold text-[#101828]">
+        Warum muss ich mich anmelden?
+      </p>
+      <p className="mt-1 text-[13px] font-semibold leading-6 text-[#667085]">
+        Deine Dokumente, Verträge und Fristen sind privat und deinem Konto zugeordnet.
+      </p>
+    </section>
   );
 }
 

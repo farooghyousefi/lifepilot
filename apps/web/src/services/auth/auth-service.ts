@@ -1,5 +1,13 @@
 import type { AuthSession, User } from "@lifepilot/shared";
 
+export type SocialLoginProvider = "apple" | "google";
+
+export interface SocialLoginAvailability {
+  apple: boolean;
+  google: boolean;
+  isHostedUiConfigured: boolean;
+}
+
 export interface SignInInput {
   email: string;
   password: string;
@@ -45,10 +53,15 @@ export interface AuthService {
   forgotPassword(input: ForgotPasswordInput): Promise<void>;
   getCurrentSession(): Promise<AuthSession | null>;
   getCurrentUser(): Promise<User | null>;
+  getSocialLoginAvailability(): SocialLoginAvailability;
+  handleOAuthCallback(): Promise<AuthSession>;
   isAuthenticated(): Promise<boolean>;
+  refreshSessionIfNeeded(): Promise<AuthSession | null>;
   register(input: RegisterInput): Promise<SignUpResult>;
   resendConfirmationCode(input: ResendConfirmationCodeInput): Promise<void>;
   signIn(input: SignInInput): Promise<AuthSession>;
+  startAppleLogin(): Promise<void>;
+  startGoogleLogin(): Promise<void>;
   signUp(input: SignUpInput): Promise<SignUpResult>;
   signOut(): Promise<void>;
 }

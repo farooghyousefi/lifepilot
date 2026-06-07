@@ -165,12 +165,12 @@ export function LifePilotShell({
   children,
 }: NavigationProps & { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[#FBFAF8] text-life-text">
-      <div className="mx-auto grid min-h-screen w-full max-w-[1640px] bg-white md:grid-cols-[300px_1fr]">
+    <div className="min-h-screen overflow-x-hidden bg-[#FBFAF8] text-life-text">
+      <div className="mx-auto grid min-h-screen w-full min-w-0 max-w-[1640px] bg-white md:grid-cols-[300px_1fr]">
         <Sidebar activeItem={activeItem} />
-        <div className="min-w-0 bg-[#FCFBFA] pb-24 md:pb-0">
+        <div className="min-w-0 overflow-x-hidden bg-[#FCFBFA] pb-24 md:pb-0">
           <AuthGuard>
-            <main className="mx-auto max-w-[1240px] px-5 py-5 sm:px-8 md:px-10 md:py-9 xl:px-12">
+            <main className="mx-auto w-full max-w-[1240px] min-w-0 px-4 py-5 sm:px-8 md:px-10 md:py-9 xl:px-12">
               {children}
             </main>
           </AuthGuard>
@@ -202,18 +202,18 @@ export function DashboardHeader() {
         </button>
       </div>
 
-      <div className="mt-8 flex items-start justify-between gap-4 md:mt-0">
-        <div className="flex items-start gap-4">
+      <div className="mt-8 flex min-w-0 items-start justify-between gap-4 md:mt-0">
+        <div className="flex min-w-0 items-start gap-3 sm:gap-4">
           <Sun
             aria-hidden="true"
-            className="mt-1 size-11 text-[#101828]"
+            className="mt-1 size-9 shrink-0 text-[#101828] sm:size-11"
             strokeWidth={1.8}
           />
-          <div>
-            <h1 className="text-[26px] font-bold leading-tight tracking-[-0.01em] text-[#101828] md:text-[32px]">
+          <div className="min-w-0">
+            <h1 className="break-words text-[26px] font-bold leading-tight tracking-[-0.01em] text-[#101828] md:text-[32px]">
               LifePilot Command Center
             </h1>
-            <p className="mt-1 text-[13px] font-medium text-[#667085] md:text-[15px]">
+            <p className="mt-1 break-words text-[13px] font-medium text-[#667085] md:text-[15px]">
               Dokumente, Fristen und nächste Schritte im Blick.
             </p>
           </div>
@@ -267,22 +267,27 @@ export function PageHeader({
         </button>
       </div>
 
-      <div className="mt-8 flex items-start justify-between gap-4 md:mt-0">
-        <div>
+      <div className="mt-8 flex min-w-0 items-start justify-between gap-4 md:mt-0">
+        <div className="min-w-0">
           <p className="text-[13px] font-bold uppercase tracking-[0.08em] text-[#2FA779]">
             {eyebrow}
           </p>
-          <h1 className="mt-2 text-[30px] font-bold leading-tight tracking-[-0.01em] text-[#101828] md:text-[36px]">
+          <h1 className="mt-2 break-words text-[28px] font-bold leading-tight tracking-[-0.01em] text-[#101828] sm:text-[30px] md:text-[36px]">
             {title}
           </h1>
-          <p className="mt-2 max-w-2xl text-[15px] font-medium leading-7 text-[#667085]">
+          <p className="mt-2 max-w-2xl break-words text-[15px] font-medium leading-7 text-[#667085]">
             {subtitle}
           </p>
         </div>
-        <span className="hidden items-center gap-2 rounded-full border border-[#E7EAE5] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#475467] shadow-button md:inline-flex">
-          <span className="size-2.5 rounded-full bg-[#12B981]" />
-          Cognito geschützt
-        </span>
+
+        <div className="hidden items-center gap-3 md:flex">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#E7EAE5] bg-white px-5 py-2.5 text-[13px] font-semibold text-[#475467] shadow-button">
+            <span className="size-2.5 rounded-full bg-[#12B981]" />
+            Demo-Modus
+          </span>
+
+          <UserMenu />
+        </div>
       </div>
     </header>
   );
@@ -311,17 +316,17 @@ export function SummaryCard({
 
   return (
     <article
-      className={`relative min-h-[148px] overflow-hidden rounded-[18px] border p-6 shadow-card ${classes.bg} ${classes.border}`}
+      className={`relative min-h-[148px] overflow-hidden rounded-[18px] border p-5 shadow-card sm:p-6 ${classes.bg} ${classes.border}`}
     >
       <div className="relative z-10">
-        <div className={`flex items-center gap-3 text-[15px] font-bold ${classes.text}`}>
-          <Icon className="size-6" aria-hidden="true" strokeWidth={2.2} />
-          {label}
+        <div className={`flex min-w-0 items-center gap-3 text-[15px] font-bold ${classes.text}`}>
+          <Icon className="size-6 shrink-0" aria-hidden="true" strokeWidth={2.2} />
+          <span className="min-w-0 break-words">{label}</span>
         </div>
         {isChart ? (
-          <div className="mt-8 grid grid-cols-[minmax(0,1fr)_88px] items-end gap-3">
+          <div className="mt-8 grid grid-cols-[minmax(0,1fr)_72px] items-end gap-3 sm:grid-cols-[minmax(0,1fr)_88px]">
             <p
-              className={`min-w-0 whitespace-nowrap ${valueSizeClass} font-bold leading-none text-[#101828]`}
+              className={`min-w-0 break-words ${valueSizeClass} font-bold leading-none text-[#101828]`}
             >
               {value}
             </p>
@@ -329,13 +334,13 @@ export function SummaryCard({
           </div>
         ) : (
           <p
-            className={`mt-8 whitespace-nowrap ${valueSizeClass} font-bold leading-none text-[#101828]`}
+            className={`mt-8 break-words ${valueSizeClass} font-bold leading-none text-[#101828]`}
           >
             {value}
           </p>
         )}
-        <p className="mt-4 flex items-center gap-2 text-[13px] font-semibold text-[#667085]">
-          <span className={`size-2.5 rounded-full ${classes.dot}`} />
+        <p className="mt-4 flex min-w-0 items-start gap-2 break-words text-[13px] font-semibold text-[#667085]">
+          <span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${classes.dot}`} />
           {meta}
         </p>
       </div>
@@ -348,10 +353,10 @@ function SummaryChartVisual({ accent }: { accent: Accent }) {
   const classes = accentClasses[accent];
 
   return (
-    <div className="flex h-14 w-[88px] items-end gap-1.5 justify-self-end opacity-90">
+    <div className="flex h-14 w-[72px] items-end gap-1 justify-self-end opacity-90 sm:w-[88px] sm:gap-1.5">
       {[18, 28, 25, 38, 34, 48].map((height, index) => (
         <span
-          className={`w-3 rounded-full ${classes.progress}`}
+          className={`w-2.5 rounded-full sm:w-3 ${classes.progress}`}
           key={height + index}
           style={{ height }}
         />
@@ -379,7 +384,7 @@ function SummaryVisual({
   return (
     <VisualIcon
       aria-hidden="true"
-      className={`absolute bottom-6 right-7 size-16 opacity-20 ${classes.text}`}
+      className={`absolute bottom-6 right-5 size-14 opacity-20 sm:right-7 sm:size-16 ${classes.text}`}
       strokeWidth={1.8}
     />
   );
@@ -393,13 +398,13 @@ export function DashboardSection({
   title: string;
 }) {
   return (
-    <section className="rounded-[22px] border border-[#ECEFEB] bg-white p-6 shadow-card">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold tracking-[-0.01em] text-[#101828]">
+    <section className="rounded-[22px] border border-[#ECEFEB] bg-white p-5 shadow-card sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="break-words text-xl font-bold tracking-[-0.01em] text-[#101828]">
           {title}
         </h2>
         <button
-          className="rounded-xl border border-[#ECEFEB] bg-white px-4 py-2 text-sm font-semibold text-[#344054] shadow-button transition hover:border-[#D5EBDD] hover:text-[#2FA779]"
+          className="w-full rounded-xl border border-[#ECEFEB] bg-white px-4 py-2 text-sm font-semibold text-[#344054] shadow-button transition hover:border-[#D5EBDD] hover:text-[#2FA779] sm:w-auto"
           type="button"
         >
           Alle ansehen
@@ -429,7 +434,7 @@ export function GoalItem({
         <Icon className="size-6" aria-hidden="true" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-bold text-[#101828]">{title}</p>
+        <p className="break-words text-[15px] font-bold text-[#101828]">{title}</p>
         <div className="mt-3 flex items-center gap-2">
           <span className={`text-[13px] font-bold ${classes.text}`}>
             {progress}%
@@ -464,8 +469,8 @@ export function DocumentItem({
         <FileText className="size-6" aria-hidden="true" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-bold text-[#101828]">{title}</p>
-        <p className="mt-1 text-[13px] font-semibold text-[#667085]">{meta}</p>
+        <p className="break-words text-[15px] font-bold text-[#101828]">{title}</p>
+        <p className="mt-1 break-words text-[13px] font-semibold text-[#667085]">{meta}</p>
       </div>
       <ChevronRight className="size-5 shrink-0 text-[#98A2B3]" aria-hidden="true" />
     </div>
@@ -492,8 +497,8 @@ export function ReminderItem({
         <div className="py-2 text-xl font-bold text-[#101828]">{day}</div>
       </div>
       <div className="min-w-0">
-        <p className="truncate text-[15px] font-bold text-[#101828]">{title}</p>
-        <p className="mt-1 text-[13px] font-semibold text-[#667085]">{meta}</p>
+        <p className="break-words text-[15px] font-bold text-[#101828]">{title}</p>
+        <p className="mt-1 break-words text-[13px] font-semibold text-[#667085]">{meta}</p>
       </div>
     </div>
   );
@@ -513,13 +518,13 @@ export function InsightStripCard({
   const classes = accentClasses[accent];
 
   return (
-    <article className={`flex items-center gap-5 rounded-[18px] border p-5 ${classes.bg} ${classes.border}`}>
+    <article className={`flex min-w-0 items-start gap-4 rounded-[18px] border p-5 sm:items-center sm:gap-5 ${classes.bg} ${classes.border}`}>
       <div className={`flex size-14 shrink-0 items-center justify-center rounded-full ${classes.icon}`}>
         <Icon className="size-7" aria-hidden="true" />
       </div>
-      <div>
-        <h3 className={`text-[15px] font-bold ${classes.text}`}>{title}</h3>
-        <p className="mt-2 text-[14px] font-medium leading-6 text-[#667085]">
+      <div className="min-w-0">
+        <h3 className={`break-words text-[15px] font-bold ${classes.text}`}>{title}</h3>
+        <p className="mt-2 break-words text-[14px] font-medium leading-6 text-[#667085]">
           {text}
         </p>
       </div>

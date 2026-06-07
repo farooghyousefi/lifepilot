@@ -153,8 +153,8 @@ export function createOrUpdateContractRecord(
     ? state.contracts.find((item) => item.id === contract.id)
     : undefined;
   const facts = {
-    ...(existing?.facts ?? {}),
-    ...(contract.facts ?? {}),
+    ...asFactRecord(existing?.facts),
+    ...asFactRecord(contract.facts),
   };
   const category = getFactString(facts.category) as ContractCategory | undefined;
   const normalized = normalizeContractRecord({
@@ -249,7 +249,7 @@ export function listMissingFacts(): Array<{
   missingFact: MissingFact;
 }> {
   return listContractRecords().flatMap((contract) =>
-    contract.missingFacts.map((missingFact) => ({
+    asArray<MissingFact>(contract.missingFacts).map((missingFact) => ({
       contract,
       missingFact,
     })),
@@ -260,7 +260,7 @@ export function listContractsNeedingReview(): ContractRecord[] {
   return listContractRecords().filter(
     (contract) =>
       contract.lifecycleStatus === "needs-review" ||
-      contract.missingFacts.length > 0,
+      asArray<MissingFact>(contract.missingFacts).length > 0,
   );
 }
 
@@ -272,20 +272,30 @@ export function getMissingRequiredFacts(
 }
 
 export function calculateContractBrain(
-  contract: Pick<
+  contract: Partial<Pick<
     ContractRecord,
     "category" | "dates" | "facts" | "identifiers"
-  >,
+  >> | null | undefined,
 ): ContractBrainSummary {
-  const missingFacts = getMissingFacts(contract.category, contract.facts);
-  const nextImportantDate = getNextImportantDate(contract.dates);
+  const facts = asFactRecord(contract?.facts);
+  const dates = isRecord(contract?.dates)
+    ? (contract.dates as ContractDates)
+    : {};
+  const identifiers = isRecord(contract?.identifiers)
+    ? (contract.identifiers as ContractIdentifier)
+    : {};
+  const missingFacts = getMissingFacts(
+    normalizeContractCategory(contract?.category),
+    facts,
+  );
+  const nextImportantDate = getNextImportantDate(dates);
   const today = startOfDay(new Date());
-  const cancellationDate = parseIsoDate(contract.dates.cancellationDate);
+  const cancellationDate = parseIsoDate(dates.cancellationDate);
   const hasIdentifier = Boolean(
-    contract.identifiers.contractNumber ||
-      contract.identifiers.customerNumber ||
-      contract.identifiers.policyNumber ||
-      contract.identifiers.fileNumber,
+    identifiers.contractNumber ||
+      identifiers.customerNumber ||
+      identifiers.policyNumber ||
+      identifiers.fileNumber,
   );
   const isCancellationDeadlineMissed = Boolean(
     cancellationDate && cancellationDate < today,
@@ -328,7 +338,7 @@ export function createCancellationDraft(
 ): ContractActionDraft | null {
   const contract = getContractRecord(contractId);
 
-  if (!contract || contract.missingFacts.length > 0) {
+  if (!contract || asArray<MissingFact>(contract.missingFacts).length > 0) {
     return null;
   }
 
@@ -414,7 +424,7 @@ export function createOfferComparisonIntent(
     neededData.push("provider");
   }
 
-  if (!contract.cost.amount) {
+  if (!contract.cost?.amount) {
     neededData.push("monthlyPrice");
   }
 
@@ -464,12 +474,17 @@ function updateFact(
   });
 }
 
-function normalizeContractRecord(contract: Partial<ContractRecord>): ContractRecord {
+function normalizeContractRecord(contract: unknown): ContractRecord {
   const now = new Date().toISOString();
-  const facts = contract.facts ?? {};
+  const safeContract: Partial<ContractRecord> = isRecord(contract)
+    ? (contract as Partial<ContractRecord>)
+    : {};
+  const facts = asFactRecord(safeContract.facts);
   const category =
-    contract.category ??
-    ((getFactString(facts.category) as ContractCategory | undefined) || "other");
+    normalizeContractCategory(
+      safeContract.category ??
+        (getFactString(facts.category) as ContractCategory | undefined),
+    );
   const identifiers = getIdentifiers(facts);
   const cost = getContractCost(facts);
   const dates = getContractDates(facts);
@@ -486,38 +501,42 @@ function normalizeContractRecord(contract: Partial<ContractRecord>): ContractRec
     cancellation,
     category,
     cost,
-    createdAt: contract.createdAt ?? now,
+    createdAt: safeContract.createdAt ?? now,
     dates,
-    documentId: contract.documentId,
+    documentId: safeContract.documentId,
     facts,
-    id: contract.id ?? `contract-record-${Date.now()}`,
+    id: safeContract.id ?? `contract-record-${Date.now()}`,
     identifiers,
     lifecycleStatus: "unknown",
     missingFacts: [],
     name:
-      contract.name ??
+      safeContract.name ??
       getFactString(facts.provider) ??
       getFactString(facts.authorityName) ??
       "Unbenannter Vorgang",
     provider:
-      contract.provider ??
+      safeContract.provider ??
       getFactString(facts.provider) ??
       getFactString(facts.authorityName),
     relatedPersonProfileId:
-      contract.relatedPersonProfileId ??
+      safeContract.relatedPersonProfileId ??
       getFactString(facts.relatedPersonProfileId) ??
       "profile-me",
-    updatedAt: contract.updatedAt ?? now,
+    updatedAt: safeContract.updatedAt ?? now,
   };
   const brain = calculateContractBrain(base);
 
   return {
     ...base,
-    actionDraft: contract.actionDraft,
+    actionDraft: isRecord(safeContract.actionDraft)
+      ? (safeContract.actionDraft as ContractActionDraft)
+      : undefined,
     brain,
     lifecycleStatus: brain.lifecycleStatus,
     missingFacts: brain.missingFacts,
-    offerComparisonIntent: contract.offerComparisonIntent,
+    offerComparisonIntent: isRecord(safeContract.offerComparisonIntent)
+      ? (safeContract.offerComparisonIntent as OfferComparisonIntent)
+      : undefined,
   };
 }
 
@@ -757,7 +776,21 @@ function readKnowledgeState(): KnowledgeState {
       };
     }
 
-    return JSON.parse(rawValue) as KnowledgeState;
+    const parsedValue = JSON.parse(rawValue);
+    const storedState = isRecord(parsedValue) ? parsedValue : {};
+
+    return {
+      contracts: asArray<Partial<ContractRecord>>(storedState.contracts)
+        .filter(isRecord)
+        .map((contract) => normalizeContractRecord(contract)),
+      extractedFactsByDocumentId:
+        isRecord(storedState.extractedFactsByDocumentId)
+          ? (storedState.extractedFactsByDocumentId as Record<
+              string,
+              ExtractedDocumentFacts
+            >)
+          : {},
+    };
   } catch {
     return {
       contracts: [],
@@ -772,4 +805,31 @@ function writeKnowledgeState(state: KnowledgeState): void {
   }
 
   window.localStorage.setItem(knowledgeStorageKey, JSON.stringify(state));
+}
+
+function normalizeContractCategory(value: unknown): ContractCategory {
+  return isContractCategory(value) ? value : "other";
+}
+
+function isContractCategory(value: unknown): value is ContractCategory {
+  return (
+    typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(requiredFieldGroupsByCategory, value)
+  );
+}
+
+function asFactRecord(
+  value: unknown,
+): Partial<Record<RequiredFactKey, DocumentFact>> {
+  return isRecord(value)
+    ? (value as Partial<Record<RequiredFactKey, DocumentFact>>)
+    : {};
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }

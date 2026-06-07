@@ -6,7 +6,111 @@ LifePilot is not positioned as "another AI app". It helps normal non-technical p
 
 This repository must not contain API keys, secrets, real user data, or real private documents.
 
-## Current Milestone: LifePilot Memory Core MVP
+## Current Milestone: Auth & Upload Simplicity MVP
+
+This sprint makes LifePilot easier for normal non-technical users:
+
+- Users can stay signed in across reloads through the existing Cognito/Amplify session store. The app checks the current session on startup and clears expired sessions cleanly. Passwords are never stored in `localStorage`.
+- Mock auth/dev mode still works and stores only a fake local development session for reload convenience.
+- Email/password login remains available.
+- Google and Apple login buttons are visible, but only active when Cognito Hosted UI/OAuth public environment variables are configured. Otherwise the UI says the method is prepared but not activated.
+- `/auth/callback` is prepared for redirect-based Cognito Hosted UI login and redirects to `/dashboard` after a real session is available.
+- `/documents` now starts from selecting or dropping a file. LifePilot proposes a document name, uploads through the available flow, and starts deterministic analysis automatically where possible.
+- TXT files are read locally and analyzed for possible deadlines and contract facts.
+- Text-based PDFs are read locally when direct text is available. If no text is available, LifePilot uses the filename for naming/date hints and explains that OCR is needed later.
+- After upload, `/documents` shows a Smart Brain assistant summary by default: what the document is, what matters, the next action, at most one question, and at most three prepared buttons. Raw text, all dates, facts, and technical metadata are hidden behind collapsed details.
+- `/api/ai/document-brain` is server-only. If `OPENAI_API_KEY` is set, the route calls OpenAI with structured JSON and validates/sanitizes the result. If the key is missing or the provider fails, LifePilot returns the deterministic Brain fallback instead.
+- The deterministic fallback recognizes employment termination letters such as `Kündigung Arbeitsverhältnis`, highlights the employment end date, the Agentur für Arbeit action, and the document date, and keeps unrelated dates such as a contract start date in hidden details.
+- Images show honest prepared states. No fake OCR, AI, Gmail, Calendar, subscription, or payment flow is implemented in this sprint.
+- Users can rename an uploaded document later without requiring the backend to be live.
+
+Required public Cognito Hosted UI variables for social login activation:
+
+```bash
+NEXT_PUBLIC_COGNITO_DOMAIN=
+NEXT_PUBLIC_COGNITO_CLIENT_ID=
+NEXT_PUBLIC_COGNITO_REDIRECT_SIGN_IN=http://localhost:3000/auth/callback
+NEXT_PUBLIC_COGNITO_REDIRECT_SIGN_OUT=http://localhost:3000/login
+NEXT_PUBLIC_COGNITO_OAUTH_SCOPES=openid,email,profile
+```
+
+Do not put Google or Apple client secrets in frontend environment variables.
+
+Optional server-only Smart Brain variables:
+
+```bash
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+Do not use `NEXT_PUBLIC_OPENAI_API_KEY`. OpenAI keys must never be exposed to the browser.
+
+What still needs Cognito console setup:
+
+1. Configure Cognito Hosted UI domain.
+2. Configure Google provider in Cognito.
+3. Configure Apple provider in Cognito.
+4. Add local callback URL.
+5. Add production callback URL.
+6. Add logout URLs.
+7. Add env variables in Vercel.
+8. Test Google login locally.
+9. Test Google login in production.
+10. Test Apple login in production.
+11. Confirm Cognito user id remains stable for saved contracts/reminders.
+
+Automatic document naming uses this priority:
+
+1. For TXT content, LifePilot looks for provider, document type, and date, for example `Vodafone Rechnung 12.06.2026`, `Allianz Versicherung 2026`, `Jobcenter Schreiben 15.07.2026`, or `Mietvertrag 2026`.
+2. For text-based PDFs, LifePilot first tries direct PDF text extraction and then uses the same deterministic naming rules.
+3. If only the file name is available, scanner-style names are cleaned and made human-readable. German dates like `17.4.25`, `21.4.25`, `17.04.2025`, and `21.04.2025` are normalized.
+4. Invoice filenames can produce clean names such as `Rechnung 17.04.2025 bis 21.04.2025`.
+5. If there is not enough information, LifePilot falls back to `Dokument vom <heutiges Datum>`.
+
+Naming confidence is stored/displayed as `high`, `medium`, or `low`.
+
+Upload pipeline next:
+
+1. Live S3 upload validation.
+2. Stronger PDF extraction validation across browser/device combinations.
+3. OCR for photos/scans.
+4. Connect prepared reminder/task buttons to real confirmed actions.
+5. Persist Brain results server-side after AWS document storage is live.
+
+What works locally:
+
+- Mock/dev login, including reload-friendly fake session state.
+- TXT naming and deterministic TXT analysis in the browser.
+- Text-based PDF extraction in the browser when direct text is available.
+- Filename-based fallback naming/date detection, including `17.4.25` and `21.4.25`.
+- Smart Brain document summaries through server-only OpenAI when configured, with deterministic fallback when not configured.
+- Local/dev upload fallback when the backend is unavailable.
+- Browser-local analysis results, extracted facts, contract records, and reminders.
+
+What needs backend/AWS deploy:
+
+- Production S3 document storage validation.
+- Durable document metadata and analysis records.
+- Cross-device sync.
+- Durable Brain result storage and backend OCR processing.
+- Hosted UI provider activation in Cognito.
+
+Manual browser test steps:
+
+1. Start the web app with `NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_USE_MOCKS=true pnpm --filter @lifepilot/web dev`.
+2. Open `http://localhost:3000/login`.
+3. Confirm Google and Apple show as prepared/bald verfügbar when Hosted UI env vars are missing.
+4. Sign in with any email/password in mock mode.
+5. Open `http://localhost:3000/documents`.
+6. Confirm there is one primary upload area: `Dokument hochladen` and `Datei auswählen oder hier ablegen`.
+7. Upload a TXT file containing dates like `fällig am 12.06.2026` and `Kündigungsfrist endet am 30.11.2026`.
+8. Expected TXT result: document uploaded, suggested name, Smart Brain summary shown first, raw text/dates/facts hidden behind collapsed details.
+9. Upload `Rechnung_B-25-016_AN_12904_GB_17.4.25_bis_21.4.25.pdf`.
+10. Expected PDF result: suggested name like `Rechnung 17.04.2025 bis 21.04.2025`; if direct PDF text is available, `PDF-Text wurde erkannt`; if not, `PDF enthält keinen direkt lesbaren Text`; in both cases Smart Brain shows only the most important findings first.
+11. For PNG/JPG scans, expected result is uploaded document plus OCR message: OCR is prepared but not active.
+12. Upload or paste a termination letter containing `Kündigung Arbeitsverhältnis`, `Berlin, den 06.02.2026`, `fristgerecht zum 24.02.2026`, `innerhalb von drei Tagen nach Erhalt`, and `14.11.2025`. Expected Smart Brain result: title `Kündigung Arbeitsverhältnis erkannt`, main findings for `24.02.2026`, Arbeitsuchendmeldung within 3 days after receipt, and `06.02.2026`; question `Wann hast du dieses Schreiben erhalten?`; buttons `Erinnerung erstellen`, `Aufgabe erstellen`, `Details anzeigen`; `14.11.2025` only in hidden details.
+
+## Previous Milestone: LifePilot Memory Core MVP
 
 The web app now focuses on the real LifePilot loop:
 
@@ -41,7 +145,7 @@ What works now:
 - The user can confirm a detected deadline as a local reminder.
 - `/dashboard` uses local knowledge data for contracts, missing facts, possible cancellations, and action suggestions.
 - `/reminders` shows locally confirmed reminders with complete/delete actions.
-- PDF and photo/OCR paths show honest preparation states. They do not fake extraction.
+- PDF and photo/OCR paths show honest states. Text-based PDFs may be read locally; scanned PDFs and photos still need OCR later.
 
 Local/dev scope:
 
@@ -69,7 +173,7 @@ Next milestones:
 
 1. AWS deploy and live DynamoDB validation.
 2. Document Detail Page.
-3. Real PDF text extraction.
+3. Stronger PDF extraction validation.
 4. OCR for photos/letters.
 5. AI document explanation.
 6. Calendar export / ICS.
@@ -189,7 +293,8 @@ Important boundaries:
 - LifePilot must not repeatedly ask for known facts.
 - Cancellation drafts are only drafts.
 - Offer comparison is only planned metadata.
-- No automatic cancellation, email sending, banking call, comparison portal call, or external AI call happens in this milestone.
+- No automatic cancellation, email sending, banking call, comparison portal call, or browser-side external AI call happens in this milestone.
+- The optional document Brain AI call is server-only and falls back deterministically when `OPENAI_API_KEY` is not configured.
 
 ## LifePilot Memory Core MVP
 

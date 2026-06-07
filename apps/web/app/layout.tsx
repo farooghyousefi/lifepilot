@@ -1,9 +1,11 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Life Pilot",
-  description: "AWS-first life management foundation for goals, documents, reminders, and AI insights.",
+  description:
+    "AWS-first life management foundation for goals, documents, reminders, and AI insights.",
 };
 
 export default function RootLayout({
@@ -13,7 +15,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="de" suppressHydrationWarning>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
