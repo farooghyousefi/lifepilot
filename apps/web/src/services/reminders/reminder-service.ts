@@ -8,9 +8,19 @@ import type {
   ReminderUpdateInput,
 } from "@lifepilot/shared";
 
+type StoredReminderPriority = ReminderRecord["priority"];
+
+type CreateReminderInputWithPriority = CreateReminderInput & {
+  priority?: StoredReminderPriority;
+};
+
+type ReminderWithPriority = Reminder & {
+  priority?: StoredReminderPriority;
+};
+
 export const remindersStorageKey = "lifepilot:confirmed-reminders:v1";
 
-export function readStoredReminders(): Reminder[] {
+export function readStoredReminders(): ReminderWithPriority[] {
   if (typeof window === "undefined") {
     return [];
   }
@@ -21,7 +31,9 @@ export function readStoredReminders(): Reminder[] {
     const reminders = Array.isArray(parsedValue)
       ? parsedValue
           .map(normalizeStoredReminder)
-          .filter((reminder): reminder is Reminder => Boolean(reminder))
+          .filter((reminder): reminder is ReminderWithPriority =>
+            Boolean(reminder),
+          )
       : [];
 
     return reminders.sort(
@@ -32,14 +44,18 @@ export function readStoredReminders(): Reminder[] {
   }
 }
 
-export function createReminder(input: CreateReminderInput): Reminder {
+export function createReminder(
+  input: CreateReminderInputWithPriority,
+): Reminder {
   const now = new Date().toISOString();
-  const reminder: Reminder = {
+
+  const reminder: ReminderWithPriority = {
     completed: false,
     createdAt: now,
     dueAt: input.dueAt,
     id: `reminder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     notes: input.notes,
+    priority: input.priority ?? "medium",
     source: input.source ?? "manual",
     sourceDocumentId: input.sourceDocumentId,
     sourceLabel: input.sourceLabel,
@@ -112,6 +128,7 @@ export function getDeadlineReminderKey({
 
 export function toggleReminderCompleted(reminderId: string): Reminder[] {
   const now = new Date().toISOString();
+
   const reminders = readStoredReminders().map((reminder) =>
     reminder.id === reminderId
       ? {
@@ -148,15 +165,14 @@ export function createReminderRecord(
     createReminder({
       dueAt: input.dueDate,
       notes: input.description,
+      priority: input.priority,
       source:
         input.sourceType === "contract-deadline"
           ? "contract"
-          : input.sourceType ?? "manual",
+          : (input.sourceType ?? "manual"),
       sourceDocumentId: input.sourceDocumentId,
       sourceLabel:
-        input.sourceType === "contract-deadline"
-          ? "Vertragsfrist"
-          : undefined,
+        input.sourceType === "contract-deadline" ? "Vertragsfrist" : undefined,
       title: input.title,
     }),
     {
@@ -180,11 +196,12 @@ export function updateStoredReminderRecord(
     return null;
   }
 
-  const updated: Reminder = {
+  const updated: ReminderWithPriority = {
     ...existing,
     completed: input.status ? input.status === "done" : existing.completed,
     dueAt: input.dueDate ?? existing.dueAt,
     notes: input.description ?? existing.notes,
+    priority: input.priority ?? existing.priority,
     title: input.title ?? existing.title,
     updatedAt: now,
   };
@@ -217,7 +234,7 @@ export function markStoredReminderDone(
   return updateStoredReminderRecord(reminderId, { status: "done" });
 }
 
-function writeReminders(reminders: Reminder[]): void {
+function writeReminders(reminders: ReminderWithPriority[]): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -248,7 +265,7 @@ function createReminderTitle(
 }
 
 function toReminderRecord(
-  reminder: Reminder,
+  reminder: ReminderWithPriority,
   overrides: Partial<ReminderRecord> = {},
 ): ReminderRecord {
   return {
@@ -256,21 +273,24 @@ function toReminderRecord(
     description: reminder.notes,
     dueDate: reminder.dueAt ?? new Date().toISOString(),
     id: reminder.id ?? `reminder-record-${Date.now()}`,
-    priority: overrides.priority ?? "medium",
+    priority: overrides.priority ?? reminder.priority ?? "medium",
     reminderDate: overrides.reminderDate,
     sourceContractId: overrides.sourceContractId,
     sourceDocumentId: reminder.sourceDocumentId,
     sourceType:
       overrides.sourceType ??
-      (reminder.source === "contract" ? "contract-deadline" : "document-deadline"),
+      (reminder.source === "contract"
+        ? "contract-deadline"
+        : "document-deadline"),
     status: reminder.completed ? "done" : "open",
     title: reminder.title ?? "Unbenannte Erinnerung",
-    updatedAt: reminder.updatedAt ?? reminder.createdAt ?? new Date().toISOString(),
+    updatedAt:
+      reminder.updatedAt ?? reminder.createdAt ?? new Date().toISOString(),
     userId: "local-dev-user",
   };
 }
 
-function normalizeStoredReminder(value: unknown): Reminder | null {
+function normalizeStoredReminder(value: unknown): ReminderWithPriority | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -292,6 +312,9 @@ function normalizeStoredReminder(value: unknown): Reminder | null {
     linkedGoalId:
       typeof value.linkedGoalId === "string" ? value.linkedGoalId : undefined,
     notes: typeof value.notes === "string" ? value.notes : undefined,
+    priority: isStoredReminderPriority(value.priority)
+      ? value.priority
+      : undefined,
     source: isReminderSource(value.source) ? value.source : "manual",
     sourceDocumentId:
       typeof value.sourceDocumentId === "string"
@@ -320,6 +343,12 @@ function isReminderSource(value: unknown): value is Reminder["source"] {
     typeof value === "string" &&
     ["manual", "document-deadline", "contract", "system"].includes(value)
   );
+}
+
+function isStoredReminderPriority(
+  value: unknown,
+): value is StoredReminderPriority {
+  return typeof value === "string" && ["low", "medium", "high"].includes(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

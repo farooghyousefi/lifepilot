@@ -20,12 +20,36 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const expectedTestCode = process.env.LIFEPILOT_BRAIN_TEST_CODE;
+  const providedTestCode = request.headers.get("x-lifepilot-brain-test-code");
+
+  if (!expectedTestCode) {
+    return Response.json(
+      {
+        error:
+          "LifePilot Brain ist aktuell nicht freigeschaltet. Test-Code fehlt auf dem Server.",
+      },
+      { status: 503 },
+    );
+  }
+
+  if (providedTestCode !== expectedTestCode) {
+    return Response.json(
+      {
+        error:
+          "LifePilot Brain ist aktuell nur für interne Tests freigeschaltet.",
+      },
+      { status: 403 },
+    );
+  }
   const input = normalizeLifeBrainInput(await request.json().catch(() => ({})));
   const fallback = analyzeLifeBrainLocally(input);
   const model = process.env.OPENAI_MODEL ?? defaultOpenAiModel;
 
   if (!input.rawText.trim()) {
-    return NextResponse.json(withFallbackDebug(fallback, "No input text provided"));
+    return NextResponse.json(
+      withFallbackDebug(fallback, "No input text provided"),
+    );
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -64,7 +88,9 @@ export async function POST(request: Request) {
     const content = response.output_text;
 
     if (!content) {
-      return NextResponse.json(withFallbackDebug(fallback, "Invalid OpenAI JSON"));
+      return NextResponse.json(
+        withFallbackDebug(fallback, "Invalid OpenAI JSON"),
+      );
     }
 
     let parsed: Partial<LifeBrainResult>;
@@ -72,11 +98,15 @@ export async function POST(request: Request) {
     try {
       parsed = JSON.parse(content) as Partial<LifeBrainResult>;
     } catch {
-      return NextResponse.json(withFallbackDebug(fallback, "Invalid OpenAI JSON"));
+      return NextResponse.json(
+        withFallbackDebug(fallback, "Invalid OpenAI JSON"),
+      );
     }
 
     if (!isValidLifeBrainResultCandidate(parsed)) {
-      return NextResponse.json(withFallbackDebug(fallback, "Invalid OpenAI JSON"));
+      return NextResponse.json(
+        withFallbackDebug(fallback, "Invalid OpenAI JSON"),
+      );
     }
 
     return NextResponse.json(

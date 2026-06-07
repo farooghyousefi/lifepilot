@@ -17,7 +17,10 @@ import type {
   LifeBrainResult,
 } from "../../src/services/brain";
 import { downloadLifeBrainIcsFile } from "../../src/services/brain";
-import { createReminder } from "../../src/services/reminders";
+import {
+  createReminder,
+  readStoredReminders,
+} from "../../src/services/reminders";
 
 const examples: Array<{
   inputType: LifeBrainInputType;
@@ -115,10 +118,12 @@ export function LifeBrainPanel() {
   const realActions = useMemo(
     () =>
       asArray(result?.actions).filter(
-        (action) => action.type !== "archive_only" && action.type !== "no_action",
+        (action) =>
+          action.type !== "archive_only" && action.type !== "no_action",
       ),
     [result],
   );
+
   const primaryAction = result ? getPrimaryAction(result) : null;
 
   const analyzeText = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -135,6 +140,11 @@ export function LifeBrainPanel() {
     setIsAnalyzing(true);
 
     try {
+      const brainTestCode =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("lifepilot:brain-test-code")
+          : null;
+
       const response = await fetch("/api/ai/life-brain", {
         body: JSON.stringify({
           inputType,
@@ -147,18 +157,30 @@ export function LifeBrainPanel() {
         }),
         headers: {
           "Content-Type": "application/json",
+          ...(brainTestCode
+            ? { "x-lifepilot-brain-test-code": brainTestCode }
+            : {}),
         },
         method: "POST",
       });
 
       if (!response.ok) {
-        throw new Error("LifePilot Brain konnte den Text nicht prüfen.");
+        const errorPayload = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+
+        throw new Error(
+          errorPayload?.error ??
+            "LifePilot Brain konnte den Text nicht prüfen.",
+        );
       }
 
       setResult((await response.json()) as LifeBrainResult);
-    } catch {
+    } catch (error) {
       setErrorMessage(
-        "LifePilot konnte den Inhalt gerade nicht vollständig prüfen. Bitte versuche es erneut.",
+        error instanceof Error
+          ? error.message
+          : "LifePilot konnte den Inhalt gerade nicht vollständig prüfen. Bitte versuche es erneut.",
       );
     } finally {
       setIsAnalyzing(false);
@@ -191,31 +213,55 @@ export function LifeBrainPanel() {
         return;
       }
 
-      if (!remindAt) {
-        setCtaMessage("Für eine Erinnerung fehlt noch ein klares Datum.");
+      const reminderTitle = getReminderTitle(result);
+      const reminderDueAt = toReminderDateTime(remindAt);
+      const reminderSourceText = rawText.slice(0, 500);
+
+      const existingReminder = readStoredReminders().find((reminder) => {
+        const sameSource = reminder.source === "document-deadline";
+        const sameTitle = reminder.title === reminderTitle;
+        const sameDueDate =
+          reminder.dueAt?.slice(0, 10) === reminderDueAt.slice(0, 10);
+        const sameOriginalText =
+          normalizeReminderSourceText(reminder.sourceOriginalText ?? "") ===
+          normalizeReminderSourceText(reminderSourceText);
+
+        return sameSource && sameTitle && sameDueDate && sameOriginalText;
+      });
+
+      if (existingReminder) {
+        setCtaMessage("Diese Erinnerung existiert bereits.");
         return;
       }
 
+      const reminderPriority = getReminderPriority(result, rawText);
+
       createReminder({
-        dueAt: toReminderDateTime(remindAt),
-        notes: result.shortSummary,
+        dueAt: reminderDueAt,
+        notes: getReminderNotes(result, rawText),
+        priority: reminderPriority,
         source: "document-deadline",
-        sourceLabel: result.recommendedNextStep.title,
-        sourceOriginalText: rawText.slice(0, 500),
-        title: result.recommendedNextStep.title,
+        sourceLabel: reminderTitle,
+        sourceOriginalText: reminderSourceText,
+        title: reminderTitle,
       });
+
       setCtaMessage("Erinnerung wurde lokal vorbereitet.");
       return;
     }
 
     if (primaryAction === "show_reply") {
       setIsReplyVisible(true);
-      setCtaMessage("Antwortentwurf ist sichtbar. Bitte vor dem Senden prüfen.");
+      setCtaMessage(
+        "Antwortentwurf ist sichtbar. Bitte vor dem Senden prüfen.",
+      );
       return;
     }
 
     if (primaryAction === "create_task") {
-      setCtaMessage("Aufgabe ist vorbereitet. Bitte prüfe sie vor dem Speichern.");
+      setCtaMessage(
+        "Aufgabe ist vorbereitet. Bitte prüfe sie vor dem Speichern.",
+      );
       return;
     }
 
@@ -311,7 +357,9 @@ export function LifeBrainPanel() {
           {errorMessage ? (
             <StatusMessage tone="warning" text={errorMessage} />
           ) : null}
-          {ctaMessage ? <StatusMessage tone="success" text={ctaMessage} /> : null}
+          {ctaMessage ? (
+            <StatusMessage tone="success" text={ctaMessage} />
+          ) : null}
         </div>
 
         <div className="min-w-0">
@@ -357,17 +405,20 @@ export function LifeBrainPanel() {
               <ResultCard
                 icon={CheckCircle2}
                 label="Was muss ich tun?"
-                title={result.recommendedNextStep.title}
+                title={getHumanNextStep(result).title}
               >
-                <p>{result.recommendedNextStep.description}</p>
-                <button
-                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866] sm:w-fit"
-                  onClick={handlePrimaryAction}
-                  type="button"
-                >
-                  {getPrimaryActionIcon(primaryAction ?? "archive_only")}
-                  {result.recommendedNextStep.title}
-                </button>
+                <p>{getHumanNextStep(result).description}</p>
+
+                {primaryAction ? (
+                  <button
+                    className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866] sm:w-fit"
+                    onClick={handlePrimaryAction}
+                    type="button"
+                  >
+                    {getPrimaryActionIcon(primaryAction)}
+                    {getPrimaryActionLabel(primaryAction)}
+                  </button>
+                ) : null}
               </ResultCard>
 
               <ResultCard
@@ -436,7 +487,10 @@ export function LifeBrainPanel() {
                   {result.fallbackReason ? (
                     <p>Fallback-Grund: {result.fallbackReason}</p>
                   ) : null}
-                  <p>Erkannte Organisationen: {formatList(result.detectedOrganizations)}</p>
+                  <p>
+                    Erkannte Organisationen:{" "}
+                    {formatList(result.detectedOrganizations)}
+                  </p>
                   <p>Erkannte Personen: {formatList(result.detectedPeople)}</p>
                   <p>Risiko: {result.riskLevel}</p>
                   <p>Dringlichkeit: {result.urgency}</p>
@@ -589,28 +643,355 @@ function StatusMessage({
     </div>
   );
 }
+function normalizeReminderSourceText(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").trim();
+}
 
-function getPrimaryAction(result: LifeBrainResult) {
-  if (result.shouldGenerateIcs) {
-    return "download_ics";
-  }
+type PrimaryAction =
+  | "archive"
+  | "create_reminder"
+  | "create_task"
+  | "download_ics"
+  | "show_reply";
 
-  if (result.shouldCreateReminder && result.reminders.length > 0) {
+function getPrimaryAction(result: LifeBrainResult): PrimaryAction | null {
+  const actions = asArray(result.actions);
+  const hasReminder = asArray(result.reminders).length > 0;
+  const hasDeadline = asArray(result.deadlines).length > 0;
+  const hasAppointment = asArray(result.appointments).length > 0;
+
+  const firstAction = actions.find(
+    (action) => action.type !== "archive_only" && action.type !== "no_action",
+  );
+
+  if (hasReminder || hasDeadline) {
     return "create_reminder";
   }
 
-  if (result.suggestedReply) {
+  if (result.suggestedReply || firstAction?.type === "reply") {
     return "show_reply";
   }
 
-  if (result.shouldCreateTask) {
+  if (
+    firstAction?.type === "create_task" ||
+    firstAction?.type === "provide_missing_info" ||
+    firstAction?.type === "send_document" ||
+    firstAction?.type === "call_someone" ||
+    firstAction?.type === "review_document"
+  ) {
     return "create_task";
   }
 
-  return "archive_only";
+  if (hasAppointment) {
+    return "download_ics";
+  }
+
+  if (firstAction) {
+    return "create_task";
+  }
+
+  return "archive";
 }
 
-function getPrimaryActionIcon(action: ReturnType<typeof getPrimaryAction>) {
+function getReminderTitle(result: LifeBrainResult): string {
+  const actionTitle = result.actions[0]?.title;
+  const normalizedActionTitle = actionTitle?.toLowerCase() ?? "";
+  const summary = result.shortSummary.toLowerCase();
+
+  if (
+    summary.includes("zahlungsfrist") ||
+    summary.includes("rechnung") ||
+    summary.includes("betrag") ||
+    summary.includes("zahlung mit frist") ||
+    (summary.includes("zahlung") && summary.includes("frist")) ||
+    normalizedActionTitle.includes("zahlungsfrist") ||
+    normalizedActionTitle.includes("zahlung")
+  ) {
+    return actionTitle || "Zahlungsfrist prüfen";
+  }
+
+  if (result.appointments.length > 0) {
+    return actionTitle || "Termin vorbereiten";
+  }
+
+  if (result.deadlines.length > 0) {
+    return actionTitle || "Frist prüfen";
+  }
+
+  return actionTitle || "LifePilot-Erinnerung prüfen";
+}
+
+function getImportantFactValue(
+  result: LifeBrainResult,
+  keywords: string[],
+): string | null {
+  const facts = asArray(result.importantFacts);
+
+  const fact = facts.find((item) => {
+    const searchableText = `${item.label} ${item.value}`.toLowerCase();
+
+    return keywords.some((keyword) =>
+      searchableText.includes(keyword.toLowerCase()),
+    );
+  });
+
+  return fact?.value ?? null;
+}
+
+function cleanExtractedValue(value: string): string {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/[.,;:]$/, "")
+    .trim();
+}
+
+function cleanAmountValue(value: string): string {
+  const match = value.match(
+    /(\d{1,3}(?:[.\s]\d{3})*,\d{2}\s*(?:€|eur)|\d+(?:[.,]\d{2})?\s*(?:€|eur))/i,
+  );
+
+  return match
+    ? match[1].replace(/\s+/g, " ").replace(/eur/i, "EUR").trim()
+    : cleanExtractedValue(value);
+}
+
+function getAmountFromText(text: string): string | null {
+  const match = text.match(
+    /(\d{1,3}(?:[.\s]\d{3})*,\d{2}|\d+[.,]\d{2})\s*(?:€|eur)/i,
+  );
+
+  return match
+    ? match[0].replace(/\s+/g, " ").replace(/eur/i, "EUR").trim()
+    : null;
+}
+
+function cleanPaymentReferenceValue(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const match = value.match(/[A-Z0-9]+(?:[-_/][A-Z0-9]+)+/i);
+
+  return match ? match[0].trim() : cleanExtractedValue(value);
+}
+
+function getPaymentReferenceFromText(text: string): string | null {
+  const patterns = [
+    /verwendungszweck\s+die\s+rechnungsnummer\s+([A-Z0-9][A-Z0-9_/-]+)/i,
+    /verwendungszweck\s*[:-]?\s*([A-Z0-9][A-Z0-9_/-]+)/i,
+    /rechnungsnummer\s*[:-]?\s*([A-Z0-9][A-Z0-9_/-]+)/i,
+    /rechnung\s*(?:nr\.?|nummer)\s*[:-]?\s*([A-Z0-9][A-Z0-9_/-]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+
+    if (match?.[1]) {
+      return cleanPaymentReferenceValue(match[1]);
+    }
+  }
+
+  return null;
+}
+
+function getReminderNotes(result: LifeBrainResult, sourceText: string): string {
+  const summary = result.shortSummary.toLowerCase();
+  const deadline = result.deadlines[0];
+  const dueDate = deadline?.date ? formatDate(deadline.date) : null;
+
+  const rawAmount = getImportantFactValue(result, [
+    "betrag",
+    "summe",
+    "offener betrag",
+    "gesamtbetrag",
+    "rechnungsbetrag",
+  ]);
+
+  const cleanedAmount = rawAmount ? cleanAmountValue(rawAmount) : null;
+  const amount =
+    cleanedAmount && /\d/.test(cleanedAmount)
+      ? cleanedAmount
+      : getAmountFromText(sourceText);
+
+  const rawPaymentReference = getImportantFactValue(result, [
+    "verwendungszweck",
+    "rechnungsnummer",
+    "referenz",
+    "kundennummer",
+  ]);
+
+  const paymentReference =
+    cleanPaymentReferenceValue(rawPaymentReference) ??
+    getPaymentReferenceFromText(sourceText);
+
+  const actionTitle = result.actions[0]?.title.toLowerCase() ?? "";
+  const sourceTextLower = sourceText.toLowerCase();
+
+  const looksLikeInvoice =
+    summary.includes("zahlungsfrist") ||
+    summary.includes("rechnung") ||
+    summary.includes("betrag") ||
+    summary.includes("zahlung mit frist") ||
+    (summary.includes("zahlung") && summary.includes("frist")) ||
+    actionTitle.includes("zahlungsfrist") ||
+    actionTitle.includes("zahlung") ||
+    sourceTextLower.includes("rechnung") ||
+    sourceTextLower.includes("betrag") ||
+    sourceTextLower.includes("verwendungszweck");
+
+  if (looksLikeInvoice) {
+    const firstSentence =
+      amount && dueDate
+        ? `${amount} bis ${dueDate} prüfen und bezahlen.`
+        : dueDate
+          ? `Zahlung bis ${dueDate} prüfen und bezahlen.`
+          : "Rechnung prüfen und fristgerecht bezahlen.";
+
+    return paymentReference
+      ? `${firstSentence} Verwendungszweck: ${paymentReference}.`
+      : firstSentence;
+  }
+
+  return result.shortSummary;
+}
+
+type StoredReminderPriorityValue = "low" | "medium" | "high";
+
+function getReminderPriority(
+  result: LifeBrainResult,
+  sourceText: string,
+): StoredReminderPriorityValue {
+  const actionTitle = result.actions[0]?.title ?? "";
+  const actionDescription = result.actions[0]?.description ?? "";
+
+  const searchableText = [
+    sourceText,
+    result.title,
+    result.shortSummary,
+    result.category,
+    actionTitle,
+    actionDescription,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const looksCritical =
+    searchableText.includes("inkasso") ||
+    searchableText.includes("sperrandrohung") ||
+    searchableText.includes("sperrung") ||
+    searchableText.includes("gerichtliches mahnverfahren") ||
+    searchableText.includes("vollstreckung");
+
+  if (looksCritical) {
+    return "high";
+  }
+
+  const looksHigh =
+    searchableText.includes("mahnung") ||
+    searchableText.includes("zahlungserinnerung") ||
+    searchableText.includes("zahlungsverzug") ||
+    searchableText.includes("letzte zahlungsaufforderung") ||
+    searchableText.includes("verzug");
+
+  if (looksHigh) {
+    return "high";
+  }
+
+  const looksLikeInvoice =
+    result.documentType === "invoice" ||
+    searchableText.includes("rechnung") ||
+    searchableText.includes("betrag") ||
+    searchableText.includes("zahlungsfrist") ||
+    (searchableText.includes("zahlung") && searchableText.includes("frist"));
+
+  if (looksLikeInvoice) {
+    return "medium";
+  }
+
+  const actionPriority = result.actions[0]?.priority;
+
+  if (
+    actionPriority === "low" ||
+    actionPriority === "medium" ||
+    actionPriority === "high"
+  ) {
+    return actionPriority;
+  }
+
+  return "medium";
+}
+
+function getHumanNextStep(result: LifeBrainResult): {
+  title: string;
+  description: string;
+} {
+  const deadline = result.deadlines[0];
+  const dueDate = deadline?.date ? formatDate(deadline.date) : null;
+
+  const recommendedTitle = result.recommendedNextStep.title.toLowerCase();
+  const actionTitle = result.actions[0]?.title.toLowerCase() ?? "";
+  const summary = result.shortSummary.toLowerCase();
+  const hasDeadline = result.deadlines.length > 0;
+  const hasAppointment = result.appointments.length > 0;
+
+  const looksLikeInvoice =
+    summary.includes("zahlungsfrist") ||
+    summary.includes("rechnung") ||
+    summary.includes("betrag") ||
+    summary.includes("zahlung mit frist") ||
+    (summary.includes("zahlung") && summary.includes("frist")) ||
+    recommendedTitle.includes("zahlungsfrist") ||
+    recommendedTitle.includes("zahlung") ||
+    actionTitle.includes("zahlungsfrist") ||
+    actionTitle.includes("zahlung");
+
+  if (looksLikeInvoice) {
+    return {
+      title: "Rechnung prüfen und bezahlen",
+      description: dueDate
+        ? `Prüfe Betrag und Empfänger. Wenn die Rechnung korrekt ist, bezahle sie bis zum ${dueDate}.`
+        : "Prüfe Betrag und Empfänger. Wenn die Rechnung korrekt ist, bezahle sie fristgerecht.",
+    };
+  }
+
+  if (hasAppointment) {
+    return {
+      title: "Termin vorbereiten",
+      description: dueDate
+        ? `LifePilot hat einen Termin erkannt. Prüfe Ort, Uhrzeit und benötigte Unterlagen für den ${dueDate}.`
+        : "LifePilot hat einen Termin erkannt. Prüfe Ort, Uhrzeit und benötigte Unterlagen.",
+    };
+  }
+
+  if (result.suggestedReply) {
+    return {
+      title: "Antwort und Frist prüfen",
+      description: dueDate
+        ? `Prüfe die angeforderten Unterlagen und sende deine Antwort rechtzeitig bis zum ${dueDate}.`
+        : "Prüfe die Nachricht und bereite deine Antwort vor.",
+    };
+  }
+
+  if (hasDeadline) {
+    return {
+      title: "Frist prüfen und rechtzeitig handeln",
+      description: dueDate
+        ? `LifePilot hat eine Frist erkannt. Prüfe den Inhalt und erledige die notwendige Handlung bis zum ${dueDate}.`
+        : "LifePilot hat eine Frist erkannt. Prüfe den Inhalt und erledige die notwendige Handlung rechtzeitig.",
+    };
+  }
+
+  return {
+    title: result.recommendedNextStep.title,
+    description: result.recommendedNextStep.description,
+  };
+}
+
+function getPrimaryActionIcon(action: string): React.ReactNode {
+  if (action === "create_reminder") {
+    return <CalendarClock className="size-4" aria-hidden="true" />;
+  }
+
   if (action === "download_ics") {
     return <CalendarClock className="size-4" aria-hidden="true" />;
   }
@@ -619,7 +1000,35 @@ function getPrimaryActionIcon(action: ReturnType<typeof getPrimaryAction>) {
     return <MessageSquareText className="size-4" aria-hidden="true" />;
   }
 
-  return <CheckCircle2 className="size-4" aria-hidden="true" />;
+  if (action === "create_task") {
+    return <CheckCircle2 className="size-4" aria-hidden="true" />;
+  }
+
+  return <FileText className="size-4" aria-hidden="true" />;
+}
+
+function getPrimaryActionLabel(action: string): string {
+  if (action === "create_reminder") {
+    return "Erinnerung vorbereiten";
+  }
+
+  if (action === "download_ics") {
+    return "Kalenderdatei herunterladen";
+  }
+
+  if (action === "show_reply") {
+    return "Antwortentwurf anzeigen";
+  }
+
+  if (action === "create_task") {
+    return "Aufgabe vorbereiten";
+  }
+
+  if (action === "archive") {
+    return "Sinnvoll ablegen";
+  }
+
+  return "Nächsten Schritt ausführen";
 }
 
 function createDateSummary(result: LifeBrainResult): string {
