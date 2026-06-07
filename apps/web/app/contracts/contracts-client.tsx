@@ -114,14 +114,18 @@ export function ContractsClient() {
     void refreshContracts();
   }, []);
 
+  const safeContracts = useMemo(() => asArray(contracts), [contracts]);
   const filteredContracts = useMemo(
-    () => contracts.filter((contract) => matchesFilter(contract, activeFilter)),
-    [activeFilter, contracts],
+    () =>
+      safeContracts.filter((contract) =>
+        matchesFilter(contract, activeFilter),
+      ),
+    [activeFilter, safeContracts],
   );
-  const missingCount = contracts.filter(
-    (contract) => contract.missingFacts.length > 0,
+  const missingCount = safeContracts.filter(
+    (contract) => asArray(contract.missingFacts).length > 0,
   ).length;
-  const cancellationSoonCount = contracts.filter(
+  const cancellationSoonCount = safeContracts.filter(
     (contract) =>
       contract.lifecycleStatus === "cancellable-now" ||
       contract.lifecycleStatus === "cancellation-window-upcoming",
@@ -133,7 +137,7 @@ export function ContractsClient() {
       icon: CreditCard,
       label: "Unter Beobachtung",
       meta: "Aus geprüften Dokumenten",
-      value: String(contracts.length),
+      value: String(safeContracts.length),
       visual: "document",
     },
     {
@@ -157,7 +161,7 @@ export function ContractsClient() {
       icon: FileText,
       label: "Entwürfe",
       meta: "Nur lokal vorbereitet",
-      value: String(contracts.filter((contract) => contract.actionDraft).length),
+      value: String(safeContracts.filter((contract) => contract.actionDraft).length),
       visual: "sparkles",
     },
   ] as const;
@@ -165,7 +169,7 @@ export function ContractsClient() {
   const refreshContracts = async () => {
     const result = await listPersistedContracts();
 
-    setContracts(result.data);
+    setContracts(asArray(result.data));
     setPersistenceMessage(result.message);
   };
 
@@ -331,6 +335,7 @@ function ContractBrainCard({
 }) {
   const [missingValues, setMissingValues] = useState<Record<string, string>>({});
   const [draftBody, setDraftBody] = useState(contract.actionDraft?.body ?? "");
+  const missingFacts = asArray(contract.missingFacts);
 
   useEffect(() => {
     setDraftBody(contract.actionDraft?.body ?? "");
@@ -339,7 +344,7 @@ function ContractBrainCard({
   const saveMissingValues = async () => {
     let updatedContract: ContractRecord | null = contract;
 
-    contract.missingFacts.forEach((missingFact) => {
+    missingFacts.forEach((missingFact) => {
       const value = missingValues[missingFact.key]?.trim();
 
       if (value) {
@@ -386,7 +391,7 @@ function ContractBrainCard({
               {contract.provider ?? contract.name}
             </h3>
           <span className="rounded-full bg-white px-3 py-1 text-[12px] font-bold text-[#667085]">
-            {categoryLabels[contract.category]}
+            {categoryLabels[contract.category] ?? categoryLabels.other}
           </span>
           <span className="rounded-full bg-white px-3 py-1 text-[12px] font-bold text-[#667085]">
             Datenquelle:{" "}
@@ -396,43 +401,43 @@ function ContractBrainCard({
           </span>
         </div>
           <p className="mt-2 text-[14px] font-semibold text-[#667085]">
-            {actionLabels[contract.brain.recommendedAction]}
+            {actionLabels[contract.brain?.recommendedAction ?? "contract-review-needed"]}
           </p>
         </div>
 
         <div className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[12px] font-bold text-[#2FA779]">
           <span className="size-2 rounded-full bg-[#2FA779]" />
-          {lifecycleLabels[contract.lifecycleStatus]}
+          {lifecycleLabels[contract.lifecycleStatus] ?? lifecycleLabels.unknown}
         </div>
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricBlock label="Kosten" value={formatCurrency(contract.cost.amount)} />
+        <MetricBlock label="Kosten" value={formatCurrency(contract.cost?.amount)} />
         <MetricBlock
           label="Start/Laufzeit"
           value={
-            contract.dates.startDate ??
-            contract.facts.minimumTerm?.value?.toString() ??
+            contract.dates?.startDate ??
+            contract.facts?.minimumTerm?.value?.toString() ??
             "Fehlt"
           }
         />
         <MetricBlock
           label="Nächste Frist"
-          value={formatDate(contract.brain.nextImportantDate)}
+          value={formatDate(contract.brain?.nextImportantDate)}
         />
         <MetricBlock
           label="Fehlende Angaben"
-          value={String(contract.missingFacts.length)}
+          value={String(missingFacts.length)}
         />
       </div>
 
-      {contract.missingFacts.length > 0 ? (
+      {missingFacts.length > 0 ? (
         <div className="mt-5 rounded-[18px] border border-[#FDECCB] bg-[#FFF7EA] p-4">
           <p className="text-[14px] font-bold text-[#101828]">
             Fehlende Angaben ergänzen
           </p>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
-            {contract.missingFacts.map((missingFact) => (
+            {missingFacts.map((missingFact) => (
               <label className="block" key={missingFact.key}>
                 <span className="text-[12px] font-bold text-[#344054]">
                   {missingFact.label}
@@ -578,7 +583,7 @@ function matchesFilter(
   }
 
   if (filter === "missing") {
-    return contract.missingFacts.length > 0;
+    return asArray(contract.missingFacts).length > 0;
   }
 
   if (filter === "cancellation-soon") {
@@ -605,4 +610,8 @@ function matchesFilter(
 
 function formatDate(value?: string): string {
   return value ? new Date(value).toLocaleDateString("de-DE") : "Fehlt";
+}
+
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }

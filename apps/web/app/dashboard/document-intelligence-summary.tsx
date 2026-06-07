@@ -18,33 +18,36 @@ export function DocumentIntelligenceSummary() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
 
   useEffect(() => {
-    setAnalyses(readStoredDocumentAnalyses());
-    setReminders(readStoredReminders());
+    setAnalyses(asArray(readStoredDocumentAnalyses()));
+    setReminders(asArray(readStoredReminders()));
   }, []);
+
+  const safeAnalyses = useMemo(() => asArray(analyses), [analyses]);
+  const safeReminders = useMemo(() => asArray(reminders), [reminders]);
 
   const documentReminders = useMemo(
     () =>
-      reminders
+      safeReminders
         .filter(
           (reminder) =>
             reminder.source === "document-deadline" && !reminder.completed,
         )
         .slice(0, 4),
-    [reminders],
+    [safeReminders],
   );
 
   const detectedDeadlines = useMemo(
     () =>
-      analyses
+      safeAnalyses
         .flatMap((analysis) =>
-          analysis.detectedDeadlines.map((deadline) => ({
+          asArray(analysis.detectedDeadlines).map((deadline) => ({
             ...deadline,
             documentId: analysis.documentId,
             documentName: analysis.documentName ?? "Unbenanntes Dokument",
           })),
         )
         .slice(0, 4),
-    [analyses],
+    [safeAnalyses],
   );
 
   return (
@@ -135,8 +138,7 @@ export function DocumentIntelligenceSummary() {
                     : "Datum unklar"}
                 </p>
                 <p className="mt-2 text-[13px] font-semibold leading-6 text-[#667085]">
-                  {deadline.originalText.slice(0, 170)}
-                  {deadline.originalText.length > 170 ? " ..." : ""}
+                  {formatDeadlineSnippet(deadline.originalText)}
                 </p>
               </article>
             ))}
@@ -157,4 +159,18 @@ export function DocumentIntelligenceSummary() {
       ) : null}
     </section>
   );
+}
+
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function formatDeadlineSnippet(value: string | null | undefined): string {
+  const snippet = typeof value === "string" ? value : "";
+
+  if (!snippet) {
+    return "Keine Quellstelle verfügbar.";
+  }
+
+  return `${snippet.slice(0, 170)}${snippet.length > 170 ? " ..." : ""}`;
 }

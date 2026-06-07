@@ -72,9 +72,10 @@ export class DeterministicDocumentBrainProvider
 }
 
 export function createDeterministicDocumentBrainResult(
-  input: DocumentBrainInput,
+  rawInput: DocumentBrainInput,
   providerStatus: BrainProviderStatus = "not_configured",
 ): DocumentBrainResult {
+  const input = normalizeDocumentBrainInput(rawInput);
   const text = `${input.extractedText ?? ""}\n${input.filename ?? ""}`;
   const normalizedText = text.toLowerCase();
 
@@ -123,44 +124,44 @@ export function createDeterministicDocumentBrainResult(
 }
 
 export function sanitizeDocumentBrainResult(
-  result: DocumentBrainResult,
+  result: Partial<DocumentBrainResult> | null | undefined,
 ): DocumentBrainResult {
-  const recommendedAction = sanitizeAction(result.recommendedAction);
-  const primaryButtons = result.primaryButtons
+  const safeResult = isRecord(result) ? result : {};
+  const recommendedAction = sanitizeAction(safeResult.recommendedAction);
+  const primaryButtons = asArray(safeResult.primaryButtons)
     .map(sanitizeAction)
     .slice(0, 3);
   const buttons =
     primaryButtons.length > 0 ? primaryButtons : [recommendedAction];
 
   return {
-    ...result,
-    confidence: sanitizeConfidence(result.confidence),
-    hiddenDetails: Array.isArray(result.hiddenDetails)
-      ? result.hiddenDetails.map(sanitizeHiddenDetail)
-      : [],
-    importantFindings: Array.isArray(result.importantFindings)
-      ? result.importantFindings.map(sanitizeFinding).slice(0, 3)
-      : [],
-    intent: sanitizeIntent(result.intent),
+    ...safeResult,
+    confidence: sanitizeConfidence(safeResult.confidence),
+    hiddenDetails: asArray(safeResult.hiddenDetails).map(sanitizeHiddenDetail),
+    importantFindings: asArray(safeResult.importantFindings)
+      .map(sanitizeFinding)
+      .slice(0, 3),
+    intent: sanitizeIntent(safeResult.intent),
     needsUserConfirmation: true,
-    optionalQuestion: result.optionalQuestion
-      ? sanitizeQuestion(result.optionalQuestion)
+    optionalQuestion: safeResult.optionalQuestion
+      ? sanitizeQuestion(safeResult.optionalQuestion)
       : undefined,
     primaryButtons: buttons,
-    provider: sanitizeProvider(result.provider),
-    providerStatus: sanitizeProviderStatus(result.providerStatus),
+    provider: sanitizeProvider(safeResult.provider),
+    providerStatus: sanitizeProviderStatus(safeResult.providerStatus),
     recommendedAction,
-    riskLevel: sanitizeRiskLevel(result.riskLevel),
-    sourceEvidence: Array.isArray(result.sourceEvidence)
-      ? result.sourceEvidence.map(sanitizeEvidence).slice(0, 6)
-      : [],
+    riskLevel: sanitizeRiskLevel(safeResult.riskLevel),
+    sourceEvidence: asArray(safeResult.sourceEvidence)
+      .map(sanitizeEvidence)
+      .slice(0, 6),
     simpleSummary:
-      typeof result.simpleSummary === "string" && result.simpleSummary.trim()
-        ? result.simpleSummary.trim()
+      typeof safeResult.simpleSummary === "string" &&
+      safeResult.simpleSummary.trim()
+        ? safeResult.simpleSummary.trim()
         : "LifePilot hat das Dokument geprüft.",
     title:
-      typeof result.title === "string" && result.title.trim()
-        ? result.title.trim()
+      typeof safeResult.title === "string" && safeResult.title.trim()
+        ? safeResult.title.trim()
         : "Dokument erkannt",
   };
 }
@@ -179,7 +180,7 @@ export function createDocumentBrainInputFromAnalysis({
   mimeType?: string;
 }): DocumentBrainInput {
   return {
-    deterministicDates: analysis.detectedDeadlines,
+    deterministicDates: asArray(analysis.detectedDeadlines),
     deterministicFacts: analysis.extractedFacts,
     extractedText: analysis.extractedText?.text,
     filename,
@@ -528,7 +529,7 @@ function findProviderFromText(text: string): string | undefined {
 }
 
 function createGenericDateFindings(input: DocumentBrainInput): BrainFinding[] {
-  return input.deterministicDates.slice(0, 3).map((date) => ({
+  return asArray(input.deterministicDates).slice(0, 3).map((date) => ({
     label: date.label || "Datum prüfen",
     sourceEvidence: createEvidence("Datum", date.originalText, date.dateIso),
     value: date.dateIso ? formatIsoDateGerman(date.dateIso) : date.originalText,
@@ -546,7 +547,7 @@ function createSourceEvidence(input: DocumentBrainInput): BrainSourceEvidence[] 
     });
   }
 
-  input.deterministicDates.slice(0, 5).forEach((date) => {
+  asArray(input.deterministicDates).slice(0, 5).forEach((date) => {
     evidence.push(createEvidence("Erkanntes Datum", date.originalText, date.dateIso));
   });
 
@@ -567,7 +568,7 @@ function createHiddenDetails(
     });
   }
 
-  input.deterministicDates.forEach((date) => {
+  asArray(input.deterministicDates).forEach((date) => {
     details.push({
       label: date.label,
       section: "all_dates",
@@ -627,76 +628,92 @@ function createEvidence(
   };
 }
 
-function sanitizeFinding(finding: BrainFinding): BrainFinding {
+function sanitizeFinding(finding: Partial<BrainFinding> | null | undefined): BrainFinding {
+  const safeFinding = isRecord(finding) ? finding : {};
+
   return {
-    label: String(finding.label || "Wichtig").trim(),
-    sourceEvidence: finding.sourceEvidence
-      ? sanitizeEvidence(finding.sourceEvidence)
+    label: String(safeFinding.label || "Wichtig").trim(),
+    sourceEvidence: safeFinding.sourceEvidence
+      ? sanitizeEvidence(safeFinding.sourceEvidence)
       : undefined,
-    value: String(finding.value || "").trim(),
+    value: String(safeFinding.value || "").trim(),
   };
 }
 
-function sanitizeAction(action: BrainAction): BrainAction {
-  const type = sanitizeActionType(action.type);
+function sanitizeAction(action: Partial<BrainAction> | null | undefined): BrainAction {
+  const safeAction = isRecord(action) ? action : {};
+  const type = sanitizeActionType(safeAction.type);
 
   return {
-    explanation: String(action.explanation || "Aktion vorbereiten.").trim(),
-    label: String(action.label || "Prüfen").trim(),
+    explanation: String(safeAction.explanation || "Aktion vorbereiten.").trim(),
+    label: String(safeAction.label || "Prüfen").trim(),
     requiresConfirmation: true,
-    sourceEvidence: action.sourceEvidence
-      ? sanitizeEvidence(action.sourceEvidence)
+    sourceEvidence: safeAction.sourceEvidence
+      ? sanitizeEvidence(safeAction.sourceEvidence)
       : undefined,
     suggestedDate:
-      typeof action.suggestedDate === "string" ? action.suggestedDate : undefined,
+      typeof safeAction.suggestedDate === "string"
+        ? safeAction.suggestedDate
+        : undefined,
     type,
   };
 }
 
-function sanitizeQuestion(question: BrainQuestion): BrainQuestion {
+function sanitizeQuestion(question: Partial<BrainQuestion> | null | undefined): BrainQuestion {
+  const safeQuestion = isRecord(question) ? question : {};
+
   return {
-    id: String(question.id || "question").trim(),
-    label: String(question.label || "Frage").trim(),
+    id: String(safeQuestion.id || "question").trim(),
+    label: String(safeQuestion.label || "Frage").trim(),
     placeholder:
-      typeof question.placeholder === "string" ? question.placeholder : undefined,
-    question: String(question.question || "Bitte prüfe diese Angabe.").trim(),
-    required: Boolean(question.required),
-    sourceEvidence: question.sourceEvidence
-      ? sanitizeEvidence(question.sourceEvidence)
+      typeof safeQuestion.placeholder === "string"
+        ? safeQuestion.placeholder
+        : undefined,
+    question: String(
+      safeQuestion.question || "Bitte prüfe diese Angabe.",
+    ).trim(),
+    required: Boolean(safeQuestion.required),
+    sourceEvidence: safeQuestion.sourceEvidence
+      ? sanitizeEvidence(safeQuestion.sourceEvidence)
       : undefined,
   };
 }
 
-function sanitizeEvidence(evidence: BrainSourceEvidence): BrainSourceEvidence {
+function sanitizeEvidence(
+  evidence: Partial<BrainSourceEvidence> | null | undefined,
+): BrainSourceEvidence {
+  const safeEvidence = isRecord(evidence) ? evidence : {};
+
   return {
-    dateIso: typeof evidence.dateIso === "string" ? evidence.dateIso : undefined,
-    field: typeof evidence.field === "string" ? evidence.field : undefined,
-    label: String(evidence.label || "Quelle").trim(),
+    dateIso:
+      typeof safeEvidence.dateIso === "string" ? safeEvidence.dateIso : undefined,
+    field: typeof safeEvidence.field === "string" ? safeEvidence.field : undefined,
+    label: String(safeEvidence.label || "Quelle").trim(),
     snippet:
-      typeof evidence.snippet === "string" ? evidence.snippet.slice(0, 300) : undefined,
+      typeof safeEvidence.snippet === "string"
+        ? safeEvidence.snippet.slice(0, 300)
+        : undefined,
   };
 }
 
-function sanitizeHiddenDetail(detail: HiddenDocumentDetail): HiddenDocumentDetail {
-  const section = [
-    "raw_text",
-    "all_dates",
-    "all_facts",
-    "technical",
-    "source_evidence",
-  ].includes(detail.section)
-    ? detail.section
+function sanitizeHiddenDetail(
+  detail: Partial<HiddenDocumentDetail> | null | undefined,
+): HiddenDocumentDetail {
+  const safeDetail = isRecord(detail) ? detail : {};
+  const section = isHiddenDetailSection(safeDetail.section)
+    ? safeDetail.section
     : "source_evidence";
 
   return {
-    label: String(detail.label || "Detail").trim(),
+    label: String(safeDetail.label || "Detail").trim(),
     section,
-    value: String(detail.value || "").slice(0, 5000),
+    value: String(safeDetail.value || "").slice(0, 5000),
   };
 }
 
-function sanitizeIntent(intent: string): DocumentIntent {
-  return [
+function sanitizeIntent(intent: unknown): DocumentIntent {
+  return typeof intent === "string" &&
+    [
     "employment_termination",
     "invoice",
     "contract",
@@ -709,8 +726,9 @@ function sanitizeIntent(intent: string): DocumentIntent {
     : "general_document";
 }
 
-function sanitizeActionType(type: string): BrainActionType {
-  return [
+function sanitizeActionType(type: unknown): BrainActionType {
+  return typeof type === "string" &&
+    [
     "create_reminder",
     "create_task",
     "save_document",
@@ -721,12 +739,13 @@ function sanitizeActionType(type: string): BrainActionType {
     : "review_details";
 }
 
-function sanitizeProvider(provider: string): BrainProvider {
+function sanitizeProvider(provider: unknown): BrainProvider {
   return provider === "openai" ? "openai" : "deterministic";
 }
 
-function sanitizeProviderStatus(status: string): BrainProviderStatus {
-  return [
+function sanitizeProviderStatus(status: unknown): BrainProviderStatus {
+  return typeof status === "string" &&
+    [
     "active",
     "fallback",
     "not_configured",
@@ -737,14 +756,53 @@ function sanitizeProviderStatus(status: string): BrainProviderStatus {
     : "fallback";
 }
 
-function sanitizeConfidence(confidence: string): BrainConfidence {
-  return ["low", "medium", "high"].includes(confidence)
+function sanitizeConfidence(confidence: unknown): BrainConfidence {
+  return typeof confidence === "string" &&
+    ["low", "medium", "high"].includes(confidence)
     ? (confidence as BrainConfidence)
     : "medium";
 }
 
-function sanitizeRiskLevel(riskLevel: string): BrainRiskLevel {
-  return ["low", "medium", "high"].includes(riskLevel)
+function sanitizeRiskLevel(riskLevel: unknown): BrainRiskLevel {
+  return typeof riskLevel === "string" &&
+    ["low", "medium", "high"].includes(riskLevel)
     ? (riskLevel as BrainRiskLevel)
     : "low";
+}
+
+function isHiddenDetailSection(
+  value: unknown,
+): value is HiddenDocumentDetail["section"] {
+  return (
+    typeof value === "string" &&
+    [
+      "raw_text",
+      "all_dates",
+      "all_facts",
+      "technical",
+      "source_evidence",
+    ].includes(value)
+  );
+}
+
+function normalizeDocumentBrainInput(
+  input: Partial<DocumentBrainInput> | null | undefined,
+): DocumentBrainInput {
+  return {
+    deterministicDates: asArray(input?.deterministicDates),
+    deterministicFacts: input?.deterministicFacts,
+    extractedText:
+      typeof input?.extractedText === "string" ? input.extractedText : undefined,
+    filename: typeof input?.filename === "string" ? input.filename : undefined,
+    locale: "de-DE",
+    mimeType: typeof input?.mimeType === "string" ? input.mimeType : undefined,
+  };
+}
+
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }

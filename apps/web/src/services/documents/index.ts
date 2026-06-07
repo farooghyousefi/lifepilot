@@ -13,6 +13,15 @@ export {
 } from "./document-naming-service";
 export { extractDocumentFactsFromText } from "./document-fact-extraction-service";
 export {
+  detectDocumentActions,
+  formatActionDateTime,
+} from "./document-action-engine-service";
+export {
+  createIcsCalendar,
+  downloadIcsFile,
+  type CalendarEventInput,
+} from "./ics-calendar-service";
+export {
   createDeterministicDocumentBrainResult,
   createDocumentBrainInputFromAnalysis,
   documentBrainSystemPrompt,

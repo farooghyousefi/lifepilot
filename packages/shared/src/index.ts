@@ -142,6 +142,14 @@ export type DetectedDeadlineKind =
   | "termin"
   | "datum";
 
+export type DetectedDocumentActionType =
+  | "appointment"
+  | "payment_deadline"
+  | "cancellation_deadline"
+  | "response_deadline"
+  | "contract_review"
+  | "general_reminder";
+
 export type ReminderSource =
   | "manual"
   | "document-deadline"
@@ -605,9 +613,22 @@ export interface DetectedDeadline {
   originalText: string;
 }
 
+export interface DetectedDocumentAction {
+  confidence: "high" | "medium" | "low";
+  dateIso?: ISODateString;
+  description: string;
+  id: string;
+  requiresUserConfirmation: true;
+  sourceSnippet: string;
+  time?: string;
+  title: string;
+  type: DetectedDocumentActionType;
+}
+
 export interface DocumentAnalysis {
   analyzedAt?: ISODateString;
   contentType?: string;
+  detectedActions?: DetectedDocumentAction[];
   detectedDeadlines: DetectedDeadline[];
   documentId: string;
   documentName?: string;

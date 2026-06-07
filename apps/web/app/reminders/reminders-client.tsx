@@ -68,13 +68,14 @@ export function RemindersClient() {
     void refreshReminders();
   }, []);
 
+  const safeReminders = useMemo(() => asArray(reminders), [reminders]);
   const openReminders = useMemo(
-    () => reminders.filter((reminder) => reminder.status !== "done"),
-    [reminders],
+    () => safeReminders.filter((reminder) => reminder.status !== "done"),
+    [safeReminders],
   );
   const completedReminders = useMemo(
-    () => reminders.filter((reminder) => reminder.status === "done"),
-    [reminders],
+    () => safeReminders.filter((reminder) => reminder.status === "done"),
+    [safeReminders],
   );
   const groupedReminders = useMemo(
     () => groupReminders(openReminders),
@@ -111,7 +112,7 @@ export function RemindersClient() {
   async function refreshReminders() {
     const result = await listPersistedReminders();
 
-    setReminders(result.data);
+    setReminders(asArray(result.data));
     setPersistenceMessage(result.message);
   }
 
@@ -180,11 +181,11 @@ export function RemindersClient() {
     setEditingId(reminder.id);
     setForm({
       description: reminder.description ?? "",
-      dueDate: reminder.dueDate,
-      priority: reminder.priority,
+      dueDate: reminder.dueDate ?? "",
+      priority: reminder.priority ?? "medium",
       reminderDate: reminder.reminderDate ?? "",
-      sourceType: reminder.sourceType,
-      title: reminder.title,
+      sourceType: reminder.sourceType ?? "manual",
+      title: reminder.title ?? "",
     });
   }
 
@@ -403,10 +404,10 @@ function ReminderGroupSection({
 }) {
   return (
     <DashboardSection title={title}>
-      {reminders.length > 0 ? (
-        reminders.map((reminder) => (
+      {asArray(reminders).length > 0 ? (
+        asArray(reminders).map((reminder) => (
           <ReminderCard
-            key={reminder.id}
+            key={reminder.id ?? `${title}-${reminder.title}-${reminder.dueDate}`}
             onDelete={() => onDelete(reminder.id)}
             onDone={() => onDone(reminder.id)}
             onEdit={() => onEdit(reminder)}
@@ -444,13 +445,13 @@ function ReminderCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-[15px] font-bold text-[#101828]">
-              {reminder.title}
+              {reminder.title ?? "Unbenannte Erinnerung"}
             </h3>
             <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-[#667085]">
-              {statusLabels[reminder.status]}
+              {statusLabels[reminder.status ?? "open"]}
             </span>
             <span className="rounded-full bg-white px-3 py-1 text-[11px] font-bold text-[#667085]">
-              {priorityLabels[reminder.priority]}
+              {priorityLabels[reminder.priority ?? "medium"]}
             </span>
           </div>
           <p className="mt-1 text-[13px] font-semibold text-[#667085]">
@@ -503,7 +504,7 @@ function groupReminders(
   const weekEnd = new Date(today);
   weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
 
-  return reminders.reduce<Record<ReminderGroup, ReminderRecord[]>>(
+  return asArray(reminders).reduce<Record<ReminderGroup, ReminderRecord[]>>(
     (groups, reminder) => {
       const dueDate = startOfDay(new Date(reminder.dueDate));
 
@@ -528,8 +529,18 @@ function groupReminders(
   );
 }
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString("de-DE", {
+function formatDate(value?: string): string {
+  if (!value) {
+    return "Datum fehlt";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Datum unklar";
+  }
+
+  return date.toLocaleDateString("de-DE", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -540,4 +551,8 @@ function startOfDay(date: Date): Date {
   return new Date(
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
   );
+}
+
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }

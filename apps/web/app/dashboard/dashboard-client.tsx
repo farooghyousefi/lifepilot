@@ -99,7 +99,7 @@ export function DashboardClient() {
   );
 
   useEffect(() => {
-    setAnalyses(readStoredDocumentAnalyses());
+    setAnalyses(asArray(readStoredDocumentAnalyses()));
 
     async function loadMemory() {
       const [contractResult, reminderResult] = await Promise.all([
@@ -107,8 +107,8 @@ export function DashboardClient() {
         listPersistedReminders(),
       ]);
 
-      setContracts(contractResult.data);
-      setReminders(reminderResult.data);
+      setContracts(asArray(contractResult.data));
+      setReminders(asArray(reminderResult.data));
       setPersistenceMessage(
         contractResult.status === "backend-saved" ||
           reminderResult.status === "backend-saved"
@@ -120,9 +120,13 @@ export function DashboardClient() {
     void loadMemory();
   }, []);
 
+  const safeAnalyses = useMemo(() => asArray(analyses), [analyses]);
+  const safeContracts = useMemo(() => asArray(contracts), [contracts]);
+  const safeReminders = useMemo(() => asArray(reminders), [reminders]);
+
   const openReminders = useMemo(
-    () => reminders.filter((reminder) => reminder.status !== "done"),
-    [reminders],
+    () => safeReminders.filter((reminder) => reminder.status !== "done"),
+    [safeReminders],
   );
   const overdueReminders = useMemo(
     () =>
@@ -134,32 +138,37 @@ export function DashboardClient() {
 
   const documentsForReview = useMemo(
     () =>
-      analyses.filter(
+      safeAnalyses.filter(
         (analysis) =>
           analysis.status === "failed" ||
           analysis.status === "unsupported" ||
-          analysis.detectedDeadlines.length > 0,
+          asArray(analysis.detectedDeadlines).length > 0 ||
+          asArray(analysis.detectedActions).length > 0,
       ),
-    [analyses],
+    [safeAnalyses],
   );
   const missingFacts = useMemo(
     () =>
-      contracts.flatMap((contract) =>
-        contract.missingFacts.map((missingFact) => ({
+      safeContracts.flatMap((contract) =>
+        asArray(contract.missingFacts).map((missingFact) => ({
           contract,
           missingFact,
         })),
       ),
-    [contracts],
+    [safeContracts],
   );
   const cancellationSoonContracts = useMemo(
     () =>
-      contracts.filter(
+      safeContracts.filter(
         (contract) =>
           contract.lifecycleStatus === "cancellable-now" ||
           contract.lifecycleStatus === "cancellation-window-upcoming",
       ),
-    [contracts],
+    [safeContracts],
+  );
+  const agentSuggestions = useMemo(
+    () => buildAgentSuggestions(safeContracts),
+    [safeContracts],
   );
 
   const summaryCards = [
@@ -179,7 +188,7 @@ export function DashboardClient() {
       icon: CheckCircle2,
       label: "Verträge",
       meta: "Unter Beobachtung",
-      value: String(contracts.length),
+      value: String(safeContracts.length),
       visual: "chart",
     },
     {
@@ -271,7 +280,7 @@ export function DashboardClient() {
 
       <DocumentIntelligenceSummary />
 
-      {contracts.length === 0 && reminders.length === 0 ? (
+      {safeContracts.length === 0 && safeReminders.length === 0 ? (
         <section className="mt-7 rounded-[22px] border border-[#ECEFEB] bg-white p-4 shadow-card sm:p-6">
           <p className="break-words text-[16px] font-bold text-[#101828]">
             Noch keine gespeicherten Verträge oder Erinnerungen. Lade ein
@@ -354,8 +363,8 @@ export function DashboardClient() {
         </CommandPanel>
 
         <CommandPanel icon={CreditCard} title="Zuletzt hochgeladen" tone="green">
-          {analyses.length > 0 ? (
-            analyses.slice(0, 4).map((analysis) => (
+          {safeAnalyses.length > 0 ? (
+            safeAnalyses.slice(0, 4).map((analysis) => (
               <StatusRow
                 key={analysis.documentId}
                 meta={formatAnalysisMeta(analysis)}
@@ -398,8 +407,8 @@ export function DashboardClient() {
           title="Nächste empfohlene Schritte"
           tone="green"
         >
-          {buildAgentSuggestions(contracts).length > 0 ? (
-            buildAgentSuggestions(contracts).map((suggestion) => (
+          {agentSuggestions.length > 0 ? (
+            agentSuggestions.map((suggestion) => (
               <StatusRow
                 key={suggestion}
                 meta="Nur Vorschlag. LifePilot führt nichts automatisch aus."
@@ -557,21 +566,23 @@ function EmptyState({ text }: { text: string }) {
 }
 
 function buildAgentSuggestions(contracts: ContractRecord[]): string[] {
-  return contracts
+  return asArray(contracts)
     .flatMap((contract) => {
-      if (contract.missingFacts.length > 0) {
-        return `${contract.provider ?? contract.name}: ${contract.missingFacts[0].label} fehlt - bitte ergänzen.`;
+      const missingFacts = asArray(contract.missingFacts);
+
+      if (missingFacts.length > 0) {
+        return `${contract.provider ?? contract.name}: ${missingFacts[0].label} fehlt - bitte ergänzen.`;
       }
 
-      if (contract.brain.recommendedAction === "cancellation-draft-ready") {
+      if (contract.brain?.recommendedAction === "cancellation-draft-ready") {
         return `${contract.provider ?? contract.name}: Kündigung vorbereiten, sobald du die Angaben geprüft hast.`;
       }
 
-      if (contract.category === "insurance" && contract.dates.cancellationDate) {
+      if (contract.category === "insurance" && contract.dates?.cancellationDate) {
         return `${contract.provider ?? contract.name}: Kündigungsfrist erkannt, bitte prüfen.`;
       }
 
-      if (contract.category === "authority" && contract.dates.dueDate) {
+      if (contract.category === "authority" && contract.dates?.dueDate) {
         return `${contract.provider ?? contract.name}: Frist erkannt, Antwort vorbereiten.`;
       }
 
@@ -581,8 +592,15 @@ function buildAgentSuggestions(contracts: ContractRecord[]): string[] {
 }
 
 function formatAnalysisMeta(analysis: DocumentAnalysis): string {
-  if (analysis.detectedDeadlines.length > 0) {
-    return `${analysis.detectedDeadlines.length} mögliche Frist(en) erkannt. Bitte prüfen und bestätigen.`;
+  const detectedDeadlines = asArray(analysis.detectedDeadlines);
+  const detectedActions = asArray(analysis.detectedActions);
+
+  if (detectedActions.length > 0) {
+    return `${detectedActions.length} mögliche Aktion(en) erkannt. Bitte prüfen und bestätigen.`;
+  }
+
+  if (detectedDeadlines.length > 0) {
+    return `${detectedDeadlines.length} mögliche Frist(en) erkannt. Bitte prüfen und bestätigen.`;
   }
 
   if (analysis.status === "unsupported") {
@@ -600,4 +618,8 @@ function startOfDay(date: Date): Date {
   return new Date(
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
   );
+}
+
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }

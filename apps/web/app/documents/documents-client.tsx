@@ -18,6 +18,8 @@ import {
 import { createLifePilotClient } from "@lifepilot/api-client";
 import type {
   CreateDocumentInput,
+  DetectedDocumentAction,
+  DetectedDocumentActionType,
   DocumentAnalysis,
   DocumentBrainResult,
   Document as LifePilotDocument,
@@ -39,8 +41,13 @@ import {
   suggestDocumentNameFromFile,
   createDeterministicDocumentBrainResult,
   createDocumentBrainInputFromAnalysis,
+  createIcsCalendar,
+  detectDocumentActions,
+  downloadIcsFile,
+  formatActionDateTime,
 } from "../../src/services/documents";
 import { saveExtractedFacts } from "../../src/services/knowledge";
+import { LifeBrainPanel } from "./life-brain-panel";
 
 const documentClient = createLifePilotClient({
   baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
@@ -131,6 +138,7 @@ const emptyForm: CreateDocumentInput = {
 type UploadStep = "idle" | "naming" | "uploading" | "analyzing";
 
 interface LastUploadSummary {
+  analysis: DocumentAnalysis;
   brain: DocumentBrainResult;
   document: LifePilotDocument;
 }
@@ -142,6 +150,24 @@ const allowedFileTypes = new Set([
   "text/plain",
 ]);
 const maxFileSizeBytes = 5 * 1024 * 1024;
+
+const documentActionTypes: DetectedDocumentActionType[] = [
+  "appointment",
+  "payment_deadline",
+  "cancellation_deadline",
+  "response_deadline",
+  "contract_review",
+  "general_reminder",
+];
+
+const actionTypeLabels: Record<DetectedDocumentActionType, string> = {
+  appointment: "Termin",
+  cancellation_deadline: "Kündigungsfrist",
+  contract_review: "Vertrag prüfen",
+  general_reminder: "Allgemeine Erinnerung",
+  payment_deadline: "Zahlungsfrist",
+  response_deadline: "Rückmeldefrist",
+};
 
 async function attachCognitoToken() {
   const session = await fetchAuthSession();
@@ -188,7 +214,7 @@ export function DocumentsClient() {
   useEffect(() => {
     let isMounted = true;
 
-    const storedAnalyses = readStoredDocumentAnalyses();
+    const storedAnalyses = asArray(readStoredDocumentAnalyses());
     const localAnalysisDocuments = createDocumentsFromAnalyses(storedAnalyses);
 
     setAnalyses(
@@ -253,21 +279,24 @@ export function DocumentsClient() {
   const filteredDocuments = useMemo(
     () =>
       activeCategory === "all"
-        ? documents
-        : documents.filter((document) => document.category === activeCategory),
+        ? asArray(documents)
+        : asArray(documents).filter(
+            (document) => document.category === activeCategory,
+          ),
     [activeCategory, documents],
   );
 
   const documentsForReview = useMemo(
     () =>
-      documents.filter((document) =>
+      asArray(documents).filter((document) =>
         ["expiring-soon", "needs-review"].includes(document.status),
       ).length +
       Object.values(analyses).filter(
         (analysis) =>
           analysis.status === "unsupported" ||
           analysis.status === "failed" ||
-          analysis.detectedDeadlines.length > 0,
+          asArray(analysis.detectedDeadlines).length > 0 ||
+          asArray(analysis.detectedActions).length > 0,
       ).length,
     [analyses, documents],
   );
@@ -419,6 +448,7 @@ export function DocumentsClient() {
         [uploadedDocument.id]: brain,
       }));
       setLastUploadSummary({
+        analysis,
         brain,
         document: uploadedDocument,
       });
@@ -458,6 +488,7 @@ export function DocumentsClient() {
         [localDocument.id]: brain,
       }));
       setLastUploadSummary({
+        analysis,
         brain,
         document: localDocument,
       });
@@ -532,7 +563,7 @@ export function DocumentsClient() {
         ...current,
         [document.id]: {
           ...existingBrain,
-          hiddenDetails: existingBrain.hiddenDetails.map((detail) =>
+          hiddenDetails: asArray(existingBrain.hiddenDetails).map((detail) =>
             detail.section === "technical" && detail.label === "Datei"
               ? {
                   ...detail,
@@ -560,6 +591,8 @@ export function DocumentsClient() {
         subtitle="Lade Briefe, Verträge, Rechnungen und Unterlagen hoch. LifePilot benennt und prüft sie automatisch."
         title="Dokument hochladen"
       />
+
+      <LifeBrainPanel />
 
       <section className="mt-6 rounded-[20px] border border-[#FDECCB] bg-[#FFF7EA] p-4 sm:p-5">
         <div className="flex items-start gap-3">
@@ -979,6 +1012,11 @@ function DocumentDetailPanel({
         }}
       />
 
+      <DocumentActionsPanel
+        actions={getAnalysisActions(analysis, document)}
+        documentName={document.name}
+      />
+
       <details
         className="mt-6 min-w-0 rounded-[18px] border border-[#ECEFEB] bg-[#FCFBFA] p-4"
         open={isDetailsOpen}
@@ -1034,7 +1072,7 @@ function DocumentBrainCard({
       </div>
 
       <div className="mt-5 grid gap-3">
-        {brain.importantFindings.slice(0, 3).map((finding) => (
+        {asArray(brain.importantFindings).slice(0, 3).map((finding) => (
           <div
             className="min-w-0 rounded-[16px] border border-[#ECEFEB] bg-white p-4"
             key={`${finding.label}-${finding.value}`}
@@ -1074,7 +1112,7 @@ function DocumentBrainCard({
       ) : null}
 
       <div className="mt-5 grid gap-3">
-        {brain.primaryButtons.slice(0, 3).map((action) => (
+        {asArray(brain.primaryButtons).slice(0, 3).map((action) => (
           <button
             className={`rounded-xl px-4 py-3 text-[13px] font-bold transition ${
               action.type === "create_reminder"
@@ -1097,6 +1135,228 @@ function DocumentBrainCard({
   );
 }
 
+function DocumentActionsPanel({
+  actions,
+  documentName,
+}: {
+  actions: DetectedDocumentAction[];
+  documentName: string;
+}) {
+  return (
+    <section className="mt-6 min-w-0 rounded-[20px] border border-[#EDE5FF] bg-[#F8F4FF] p-4 sm:p-5">
+      <div>
+        <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-[#6F54E8]">
+          Dokument-Hinweise
+        </p>
+        <h3 className="mt-2 break-words text-lg font-bold text-[#101828]">
+          Erkannte Aktionen & Fristen
+        </h3>
+        <p className="mt-2 break-words text-[13px] font-semibold leading-6 text-[#667085]">
+          Bitte prüfen. Erkannte Fristen und Termine sind Vorschläge und müssen bestätigt werden.
+        </p>
+      </div>
+
+      {asArray(actions).length > 0 ? (
+        <div className="mt-5 grid gap-4">
+          {asArray(actions).map((action) => (
+            <DocumentActionCard
+              action={action}
+              documentName={documentName}
+              key={action.id}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-5 rounded-[16px] border border-[#ECEFEB] bg-white p-4">
+          <p className="break-words text-[13px] font-semibold leading-6 text-[#667085]">
+            Keine eindeutige Frist oder kein Termin erkannt. Du kannst manuell eine Erinnerung erstellen.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DocumentActionCard({
+  action,
+  documentName,
+}: {
+  action: DetectedDocumentAction;
+  documentName: string;
+}) {
+  const [title, setTitle] = useState(action.title);
+  const [dateIso, setDateIso] = useState(action.dateIso ?? "");
+  const [time, setTime] = useState(action.time ?? "");
+  const [type, setType] = useState<DetectedDocumentActionType>(action.type);
+  const [description, setDescription] = useState(action.description);
+  const [sourceSnippet, setSourceSnippet] = useState(action.sourceSnippet);
+  const [alarm, setAlarm] = useState("1440");
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTitle(action.title);
+    setDateIso(action.dateIso ?? "");
+    setTime(action.time ?? "");
+    setType(action.type);
+    setDescription(action.description);
+    setSourceSnippet(action.sourceSnippet);
+    setAlarm(action.type === "appointment" ? "60" : "1440");
+    setMessage(null);
+  }, [action]);
+
+  const createCalendarFile = () => {
+    if (!dateIso) {
+      setMessage("Bitte prüfe zuerst das Datum.");
+      return;
+    }
+
+    const icsContent = createIcsCalendar({
+      alarmMinutesBefore: alarm === "none" ? undefined : Number(alarm),
+      calendarTitle: `LifePilot - ${documentName}`,
+      description: `${description}\n\nDokument: ${documentName}\nQuelle: ${sourceSnippet}`,
+      startDateIso: dateIso,
+      startTime: time || undefined,
+      summary: title,
+    });
+
+    downloadIcsFile({
+      content: icsContent,
+      fileName: `${dateIso}-${title}`,
+    });
+    setMessage("Kalendereintrag wurde als .ics-Datei erstellt.");
+  };
+
+  return (
+    <article className="min-w-0 rounded-[18px] border border-[#ECEFEB] bg-white p-4">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="break-words text-[13px] font-bold text-[#6F54E8]">
+            {actionTypeLabels[type]}
+          </p>
+          <p className="mt-1 break-words text-[13px] font-semibold text-[#667085]">
+            {formatActionDateTime({
+              ...action,
+              dateIso: dateIso || undefined,
+              time: time || undefined,
+              type,
+            })}
+          </p>
+        </div>
+        <span className="w-fit rounded-full bg-[#F7F8F5] px-3 py-1 text-[11px] font-bold text-[#667085]">
+          Sicherheit: {action.confidence}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        <label className="block">
+          <span className="text-[12px] font-bold text-[#344054]">Titel</span>
+          <input
+            className="mt-2 w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[13px] font-bold text-[#101828] outline-none focus:border-[#B9DEC7]"
+            onChange={(event) => setTitle(event.target.value)}
+            value={title}
+          />
+        </label>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-[12px] font-bold text-[#344054]">Datum</span>
+            <input
+              className="mt-2 w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[13px] font-bold text-[#101828] outline-none focus:border-[#B9DEC7]"
+              onChange={(event) => setDateIso(event.target.value)}
+              type="date"
+              value={dateIso}
+            />
+          </label>
+          <label className="block">
+            <span className="text-[12px] font-bold text-[#344054]">
+              Uhrzeit
+            </span>
+            <input
+              className="mt-2 w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[13px] font-bold text-[#101828] outline-none focus:border-[#B9DEC7]"
+              onChange={(event) => setTime(event.target.value)}
+              type="time"
+              value={time}
+            />
+          </label>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-[12px] font-bold text-[#344054]">
+              Erinnerungstyp
+            </span>
+            <select
+              className="mt-2 w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[13px] font-bold text-[#101828] outline-none focus:border-[#B9DEC7]"
+              onChange={(event) =>
+                setType(event.target.value as DetectedDocumentActionType)
+              }
+              value={type}
+            >
+              {documentActionTypes.map((actionType) => (
+                <option key={actionType} value={actionType}>
+                  {actionTypeLabels[actionType]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-[12px] font-bold text-[#344054]">
+              Kalender-Erinnerung
+            </span>
+            <select
+              className="mt-2 w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[13px] font-bold text-[#101828] outline-none focus:border-[#B9DEC7]"
+              onChange={(event) => setAlarm(event.target.value)}
+              value={alarm}
+            >
+              <option value="none">Keine</option>
+              <option value="30">30 Minuten vorher</option>
+              <option value="60">1 Stunde vorher</option>
+              <option value="1440">1 Tag vorher</option>
+            </select>
+          </label>
+        </div>
+
+        <label className="block">
+          <span className="text-[12px] font-bold text-[#344054]">
+            Beschreibung
+          </span>
+          <textarea
+            className="mt-2 min-h-24 w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[13px] font-semibold leading-6 text-[#101828] outline-none focus:border-[#B9DEC7]"
+            onChange={(event) => setDescription(event.target.value)}
+            value={description}
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-[12px] font-bold text-[#344054]">
+            Quellstelle
+          </span>
+          <textarea
+            className="mt-2 min-h-20 w-full rounded-xl border border-[#ECEFEB] bg-[#FCFBFA] px-4 py-3 text-[13px] font-semibold leading-6 text-[#101828] outline-none focus:border-[#B9DEC7]"
+            onChange={(event) => setSourceSnippet(event.target.value)}
+            value={sourceSnippet}
+          />
+        </label>
+      </div>
+
+      {message ? (
+        <p className="mt-4 break-words rounded-[14px] bg-[#F2FAF6] px-4 py-3 text-[13px] font-bold text-[#2FA779]">
+          {message}
+        </p>
+      ) : null}
+
+      <button
+        className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-[#2FA779] px-4 py-3 text-[13px] font-bold text-white transition hover:bg-[#258866] disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={!dateIso}
+        onClick={createCalendarFile}
+        type="button"
+      >
+        Kalendereintrag erstellen
+      </button>
+    </article>
+  );
+}
+
 function BrainHiddenDetails({ brain }: { brain: DocumentBrainResult }) {
   const sections = [
     { label: "Erkannter Text", section: "raw_text" },
@@ -1108,7 +1368,7 @@ function BrainHiddenDetails({ brain }: { brain: DocumentBrainResult }) {
   return (
     <div className="grid gap-3">
       {sections.map(({ label, section }) => {
-        const details = brain.hiddenDetails.filter(
+        const details = asArray(brain.hiddenDetails).filter(
           (detail) => detail.section === section,
         );
 
@@ -1399,7 +1659,7 @@ function PostUploadSummary({ summary }: { summary: LastUploadSummary }) {
         </div>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        {brain.importantFindings.slice(0, 3).map((finding) => (
+        {asArray(brain.importantFindings).slice(0, 3).map((finding) => (
           <SummaryPill
             key={`${finding.label}-${finding.value}`}
             label={finding.label}
@@ -1416,7 +1676,7 @@ function PostUploadSummary({ summary }: { summary: LastUploadSummary }) {
         </p>
       ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
-        {brain.primaryButtons.slice(0, 3).map((action) => (
+        {asArray(brain.primaryButtons).slice(0, 3).map((action) => (
           <span
             className="max-w-full break-words rounded-full bg-[#EAF7F0] px-3 py-1.5 text-[12px] font-bold text-[#2FA779]"
             key={`${action.type}-${action.label}`}
@@ -1425,6 +1685,10 @@ function PostUploadSummary({ summary }: { summary: LastUploadSummary }) {
           </span>
         ))}
       </div>
+      <DocumentActionsPanel
+        actions={getAnalysisActions(summary.analysis, summary.document)}
+        documentName={summary.document.name}
+      />
     </section>
   );
 }
@@ -1600,12 +1864,41 @@ function createEmptyAnalysis(document: LifePilotDocument): DocumentAnalysis {
   return {
     analyzedAt: undefined,
     contentType: document.contentType,
+    detectedActions: [],
     detectedDeadlines: [],
     documentId: document.id,
     documentName: document.name,
     fileName: document.fileName,
     status: "not-started",
   };
+}
+
+function getAnalysisActions(
+  analysis: DocumentAnalysis | undefined,
+  document: LifePilotDocument,
+): DetectedDocumentAction[] {
+  if (!analysis) {
+    return [];
+  }
+
+  if (asArray(analysis.detectedActions).length > 0) {
+    return asArray(analysis.detectedActions);
+  }
+
+  const fallbackText = [
+    analysis.extractedText?.text,
+    analysis.fileName,
+    document.fileName,
+    document.name,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return detectDocumentActions({
+    analyzedAt: analysis.analyzedAt,
+    documentName: document.name,
+    text: fallbackText,
+  });
 }
 
 function getAnalysisAvailabilityText(file: File): string {
@@ -1627,7 +1920,7 @@ function getAnalysisAvailabilityText(file: File): string {
 function createDocumentsFromAnalyses(
   analyses: DocumentAnalysis[],
 ): LifePilotDocument[] {
-  return analyses.map((analysis) => ({
+  return asArray(analyses).map((analysis) => ({
     addedAt: analysis.analyzedAt ?? new Date().toISOString(),
     category: "contracts",
     contentType: analysis.contentType,
@@ -1635,13 +1928,21 @@ function createDocumentsFromAnalyses(
     id: analysis.documentId,
     name: analysis.documentName ?? "Lokal analysiertes Dokument",
     recommendedAction:
-      analysis.detectedDeadlines.length > 0
+      asArray(analysis.detectedDeadlines).length > 0 ||
+      asArray(analysis.detectedActions).length > 0
         ? "Prüfe die erkannten Fristen und erstelle bei Bedarf eine Erinnerung."
         : "Prüfe die lokal erkannte Analyse.",
     securityNote:
       "Lokaler Dev-Modus: Diese Dokumentansicht kommt aus dem Browser-Speicher.",
     status:
-      analysis.detectedDeadlines.length > 0 ? "needs-review" : "protected",
+      asArray(analysis.detectedDeadlines).length > 0 ||
+      asArray(analysis.detectedActions).length > 0
+        ? "needs-review"
+        : "protected",
     uploadStatus: "metadata-only",
   }));
+}
+
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }

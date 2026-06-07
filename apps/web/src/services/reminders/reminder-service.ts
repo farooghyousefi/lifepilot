@@ -17,11 +17,15 @@ export function readStoredReminders(): Reminder[] {
 
   try {
     const rawValue = window.localStorage.getItem(remindersStorageKey);
-    const reminders = rawValue ? (JSON.parse(rawValue) as Reminder[]) : [];
+    const parsedValue = rawValue ? JSON.parse(rawValue) : [];
+    const reminders = Array.isArray(parsedValue)
+      ? parsedValue
+          .map(normalizeStoredReminder)
+          .filter((reminder): reminder is Reminder => Boolean(reminder))
+      : [];
 
     return reminders.sort(
-      (left, right) =>
-        new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime(),
+      (left, right) => getReminderTimestamp(left) - getReminderTimestamp(right),
     );
   } catch {
     return [];
@@ -81,7 +85,7 @@ export function hasReminderForDeadline({
   return readStoredReminders().some(
     (reminder) =>
       getDeadlineReminderKey({
-        dateIso: reminder.dueAt.slice(0, 10),
+        dateIso: reminder.dueAt?.slice(0, 10),
         documentId: reminder.sourceDocumentId,
         originalText: reminder.sourceOriginalText,
       }) === getDeadlineReminderKey({ deadline, documentId }),
@@ -220,7 +224,7 @@ function writeReminders(reminders: Reminder[]): void {
 
   window.localStorage.setItem(
     remindersStorageKey,
-    JSON.stringify(reminders.slice(0, 50)),
+    JSON.stringify((Array.isArray(reminders) ? reminders : []).slice(0, 50)),
   );
 }
 
@@ -229,18 +233,18 @@ function createReminderTitle(
   document: LifePilotDocument,
 ): string {
   if (deadline.kind === "kuendigung") {
-    return `Kündigungsfrist prüfen: ${document.name}`;
+    return `Kündigungsfrist prüfen: ${document.name ?? "Dokument"}`;
   }
 
   if (deadline.kind === "zahlung") {
-    return `Zahlungsfrist prüfen: ${document.name}`;
+    return `Zahlungsfrist prüfen: ${document.name ?? "Dokument"}`;
   }
 
   if (deadline.kind === "termin") {
-    return `Termin prüfen: ${document.name}`;
+    return `Termin prüfen: ${document.name ?? "Dokument"}`;
   }
 
-  return `Frist prüfen: ${document.name}`;
+  return `Frist prüfen: ${document.name ?? "Dokument"}`;
 }
 
 function toReminderRecord(
@@ -250,8 +254,8 @@ function toReminderRecord(
   return {
     createdAt: reminder.createdAt ?? new Date().toISOString(),
     description: reminder.notes,
-    dueDate: reminder.dueAt,
-    id: reminder.id,
+    dueDate: reminder.dueAt ?? new Date().toISOString(),
+    id: reminder.id ?? `reminder-record-${Date.now()}`,
     priority: overrides.priority ?? "medium",
     reminderDate: overrides.reminderDate,
     sourceContractId: overrides.sourceContractId,
@@ -260,8 +264,75 @@ function toReminderRecord(
       overrides.sourceType ??
       (reminder.source === "contract" ? "contract-deadline" : "document-deadline"),
     status: reminder.completed ? "done" : "open",
-    title: reminder.title,
+    title: reminder.title ?? "Unbenannte Erinnerung",
     updatedAt: reminder.updatedAt ?? reminder.createdAt ?? new Date().toISOString(),
     userId: "local-dev-user",
   };
+}
+
+function normalizeStoredReminder(value: unknown): Reminder | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = typeof value.id === "string" ? value.id.trim() : "";
+  const title = typeof value.title === "string" ? value.title.trim() : "";
+  const dueAt = typeof value.dueAt === "string" ? value.dueAt : "";
+
+  if (!id && !title && !dueAt) {
+    return null;
+  }
+
+  return {
+    completed: Boolean(value.completed),
+    createdAt:
+      typeof value.createdAt === "string" ? value.createdAt : undefined,
+    dueAt: dueAt || new Date().toISOString(),
+    id: id || `stored-reminder-${stableHash(JSON.stringify(value))}`,
+    linkedGoalId:
+      typeof value.linkedGoalId === "string" ? value.linkedGoalId : undefined,
+    notes: typeof value.notes === "string" ? value.notes : undefined,
+    source: isReminderSource(value.source) ? value.source : "manual",
+    sourceDocumentId:
+      typeof value.sourceDocumentId === "string"
+        ? value.sourceDocumentId
+        : undefined,
+    sourceLabel:
+      typeof value.sourceLabel === "string" ? value.sourceLabel : undefined,
+    sourceOriginalText:
+      typeof value.sourceOriginalText === "string"
+        ? value.sourceOriginalText
+        : undefined,
+    title: title || "Unbenannte Erinnerung",
+    updatedAt:
+      typeof value.updatedAt === "string" ? value.updatedAt : undefined,
+  };
+}
+
+function getReminderTimestamp(reminder: Reminder): number {
+  const timestamp = new Date(reminder.dueAt ?? "").getTime();
+
+  return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
+}
+
+function isReminderSource(value: unknown): value is Reminder["source"] {
+  return (
+    typeof value === "string" &&
+    ["manual", "document-deadline", "contract", "system"].includes(value)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function stableHash(value: string): string {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(index);
+    hash |= 0;
+  }
+
+  return Math.abs(hash).toString(36);
 }
