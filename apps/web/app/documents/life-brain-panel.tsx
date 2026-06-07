@@ -426,6 +426,16 @@ export function LifeBrainPanel() {
                   <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
                 </summary>
                 <div className="mt-4 grid gap-3 text-[13px] font-semibold leading-6 text-[#667085]">
+                  <p>
+                    Brain-Modus:{" "}
+                    {result.analysisMode === "openai"
+                      ? "OpenAI"
+                      : "Lokaler Fallback"}
+                  </p>
+                  {result.modelUsed ? <p>Modell: {result.modelUsed}</p> : null}
+                  {result.fallbackReason ? (
+                    <p>Fallback-Grund: {result.fallbackReason}</p>
+                  ) : null}
                   <p>Erkannte Organisationen: {formatList(result.detectedOrganizations)}</p>
                   <p>Erkannte Personen: {formatList(result.detectedPeople)}</p>
                   <p>Risiko: {result.riskLevel}</p>

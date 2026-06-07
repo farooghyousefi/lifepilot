@@ -71,6 +71,7 @@ export function createLifeBrainFallbackResult(input: LifeBrainInput): LifeBrainR
 
   return {
     actions: detection.actions,
+    analysisMode: "fallback",
     appointments: detection.appointments,
     brainVersion: lifeBrainVersion,
     category: detection.category,
@@ -89,6 +90,7 @@ export function createLifeBrainFallbackResult(input: LifeBrainInput): LifeBrainR
       resultType: detection.documentType,
       topAction: actionableActions[0],
     }),
+    fallbackReason: "Local deterministic analysis",
     inputType: input.inputType,
     rawDetailsCollapsed: true,
     recommendedNextStep,

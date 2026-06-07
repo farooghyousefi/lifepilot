@@ -22,61 +22,103 @@ export async function GET() {
 export async function POST(request: Request) {
   const input = normalizeLifeBrainInput(await request.json().catch(() => ({})));
   const fallback = analyzeLifeBrainLocally(input);
+  const model = process.env.OPENAI_MODEL ?? defaultOpenAiModel;
 
   if (!input.rawText.trim()) {
-    return NextResponse.json(fallback);
+    return NextResponse.json(withFallbackDebug(fallback, "No input text provided"));
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json(fallback);
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
+    return NextResponse.json(
+      withFallbackDebug(fallback, "OPENAI_API_KEY missing"),
+    );
   }
 
   try {
     const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey,
       timeout: 15_000,
     });
-    const completion = await client.chat.completions.create({
-      messages: [
-        {
-          content: lifeBrainSystemPrompt,
-          role: "system",
-        },
-        {
-          content: JSON.stringify({
-            fallbackGuidance: fallback,
-            input,
-          }),
-          role: "user",
-        },
-      ],
-      model: process.env.OPENAI_MODEL ?? defaultOpenAiModel,
-      response_format: {
-        json_schema: {
+    const response = await client.responses.create({
+      input: JSON.stringify({
+        fallbackGuidance: fallback,
+        input,
+      }),
+      instructions: lifeBrainSystemPrompt,
+      model,
+      store: false,
+      temperature: 0.1,
+      text: {
+        format: {
+          description:
+            "LifePilot Brain analysis result as one JSON object. No markdown or prose.",
           name: "lifepilot_life_brain_result",
           schema: lifeBrainResultJsonSchema,
-          strict: false,
+          strict: true,
+          type: "json_schema",
         },
-        type: "json_schema",
       },
-      temperature: 0.1,
     });
-    const content = completion.choices[0]?.message?.content;
+    const content = response.output_text;
 
     if (!content) {
-      return NextResponse.json(fallback);
+      return NextResponse.json(withFallbackDebug(fallback, "Invalid OpenAI JSON"));
     }
 
-    const parsed = JSON.parse(content) as Partial<LifeBrainResult>;
+    let parsed: Partial<LifeBrainResult>;
+
+    try {
+      parsed = JSON.parse(content) as Partial<LifeBrainResult>;
+    } catch {
+      return NextResponse.json(withFallbackDebug(fallback, "Invalid OpenAI JSON"));
+    }
 
     if (!isValidLifeBrainResultCandidate(parsed)) {
-      return NextResponse.json(fallback);
+      return NextResponse.json(withFallbackDebug(fallback, "Invalid OpenAI JSON"));
     }
 
-    return NextResponse.json(sanitizeLifeBrainResult(parsed, fallback));
-  } catch {
-    return NextResponse.json(fallback);
+    return NextResponse.json(
+      withOpenAiDebug(sanitizeLifeBrainResult(parsed, fallback), model),
+    );
+  } catch (error) {
+    return NextResponse.json(
+      withFallbackDebug(fallback, getSafeOpenAiFallbackReason(error)),
+    );
   }
+}
+
+function withFallbackDebug(
+  result: LifeBrainResult,
+  fallbackReason: string,
+): LifeBrainResult {
+  return {
+    ...result,
+    analysisMode: "fallback",
+    fallbackReason,
+    modelUsed: undefined,
+  };
+}
+
+function withOpenAiDebug(
+  result: LifeBrainResult,
+  modelUsed: string,
+): LifeBrainResult {
+  return {
+    ...result,
+    analysisMode: "openai",
+    fallbackReason: undefined,
+    modelUsed,
+  };
+}
+
+function getSafeOpenAiFallbackReason(error: unknown): string {
+  if (error instanceof Error && error.name) {
+    return `OpenAI request failed: ${error.name.slice(0, 80)}`;
+  }
+
+  return "OpenAI request failed";
 }
 
 const lifeBrainSystemPrompt = `
@@ -84,6 +126,7 @@ Du bist LifePilot Brain, die zentrale Intelligenzschicht für private Lebensadmi
 Du analysierst deutsche Alltagstexte wie Briefe, Rechnungen, Verträge, Kündigungen, Amtsschreiben, Jobcenter-Schreiben, E-Mails, Nachrichtenverläufe und Kontoauszüge.
 
 Antworte ausschließlich als JSON im vorgegebenen Schema.
+Gib keine Markdown-Blöcke, keine Code-Fences, keine Erklärungen und keinen Text außerhalb des JSON-Objekts aus.
 Sprich in einfachen, ruhigen deutschen Formulierungen.
 Extrahiere nur nützliche reale Handlungen.
 Erfinde keine Fristen, Beträge, Personen oder Organisationen.
@@ -143,9 +186,11 @@ const lifeBrainResultJsonSchema = {
         },
         required: [
           "description",
+          "dueDate",
           "id",
           "priority",
           "requiresConfirmation",
+          "time",
           "title",
           "type",
         ],
@@ -164,7 +209,14 @@ const lifeBrainResultJsonSchema = {
           time: { type: ["string", "null"] },
           title: { type: "string" },
         },
-        required: ["date", "description", "shouldGenerateIcs", "title"],
+        required: [
+          "date",
+          "description",
+          "location",
+          "shouldGenerateIcs",
+          "time",
+          "title",
+        ],
         type: "object",
       },
       type: "array",
@@ -191,6 +243,7 @@ const lifeBrainResultJsonSchema = {
           "reason",
           "shouldCreateReminder",
           "sourceText",
+          "time",
           "title",
         ],
         type: "object",
@@ -222,7 +275,14 @@ const lifeBrainResultJsonSchema = {
           reason: { type: "string" },
           time: { type: ["string", "null"] },
         },
-        required: ["context", "isActionable", "isoDate", "rawText", "reason"],
+        required: [
+          "context",
+          "isActionable",
+          "isoDate",
+          "rawText",
+          "reason",
+          "time",
+        ],
         type: "object",
       },
       type: "array",
@@ -266,7 +326,7 @@ const lifeBrainResultJsonSchema = {
       type: "array",
     },
     inputType: { type: "string" },
-    rawDetailsCollapsed: { const: true, type: "boolean" },
+    rawDetailsCollapsed: { enum: [true], type: "boolean" },
     recommendedNextStep: {
       additionalProperties: false,
       properties: {
@@ -310,7 +370,7 @@ const lifeBrainResultJsonSchema = {
             subject: { type: "string" },
             tone: { enum: ["formal", "neutral", "friendly"], type: "string" },
           },
-          required: ["body", "tone"],
+          required: ["body", "subject", "tone"],
           type: "object",
         },
         { type: "null" },
@@ -325,7 +385,7 @@ const lifeBrainResultJsonSchema = {
           priority: prioritySchema,
           title: { type: "string" },
         },
-        required: ["description", "priority", "title"],
+        required: ["description", "dueDate", "priority", "title"],
         type: "object",
       },
       type: "array",
@@ -342,6 +402,7 @@ const lifeBrainResultJsonSchema = {
     "appointments",
     "brainVersion",
     "category",
+    "clarificationQuestion",
     "confidence",
     "deadlines",
     "detectedAmounts",
@@ -363,6 +424,7 @@ const lifeBrainResultJsonSchema = {
     "shouldGenerateIcs",
     "shortSummary",
     "source",
+    "suggestedReply",
     "tasks",
     "title",
     "urgency",

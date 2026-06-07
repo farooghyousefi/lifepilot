@@ -86,6 +86,8 @@ export type LifeBrainRiskLevel =
   | "high"
   | "critical";
 
+export type LifeBrainAnalysisMode = "openai" | "fallback";
+
 export interface LifeBrainImportantFact {
   importance: LifeBrainImportance;
   label: string;
@@ -165,6 +167,7 @@ export interface LifeBrainRecommendedNextStep {
 
 export interface LifeBrainResult {
   actions: LifeBrainAction[];
+  analysisMode: LifeBrainAnalysisMode;
   appointments: LifeBrainAppointment[];
   brainVersion: string;
   category: string;
@@ -179,6 +182,8 @@ export interface LifeBrainResult {
   documentType: LifeBrainDocumentType;
   importantFacts: LifeBrainImportantFact[];
   inputType: string;
+  fallbackReason?: string;
+  modelUsed?: string;
   rawDetailsCollapsed: boolean;
   recommendedNextStep: LifeBrainRecommendedNextStep;
   reminders: LifeBrainReminder[];

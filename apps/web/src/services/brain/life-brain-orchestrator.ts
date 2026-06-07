@@ -85,6 +85,7 @@ const riskLevels: LifeBrainRiskLevel[] = [
   "critical",
 ];
 const languageValues: LifeBrainDetectedLanguage[] = ["de", "en", "unknown"];
+const analysisModes = ["openai", "fallback"] as const;
 
 export function analyzeLifeBrainLocally(input: LifeBrainInput): LifeBrainResult {
   return createLifeBrainFallbackResult(normalizeLifeBrainInput(input));
@@ -184,6 +185,9 @@ export function sanitizeLifeBrainResult(
 
   return {
     actions: actions.length > 0 ? actions : fallback.actions,
+    analysisMode: isOneOf(candidate.analysisMode, analysisModes)
+      ? candidate.analysisMode
+      : fallback.analysisMode,
     appointments,
     brainVersion: lifeBrainVersion,
     category: asString(candidate.category, 120) ?? fallback.category,
@@ -210,7 +214,9 @@ export function sanitizeLifeBrainResult(
     importantFacts: asArray(candidate.importantFacts)
       .map(sanitizeImportantFact)
       .slice(0, 6),
+    fallbackReason: asString(candidate.fallbackReason, 300) ?? fallback.fallbackReason,
     inputType: asString(candidate.inputType, 80) ?? fallback.inputType,
+    modelUsed: asString(candidate.modelUsed, 120) ?? fallback.modelUsed,
     rawDetailsCollapsed: true,
     recommendedNextStep: sanitizeRecommendedNextStep(
       candidate.recommendedNextStep,
