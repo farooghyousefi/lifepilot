@@ -1,32 +1,218 @@
 # LifePilot
 
-LifePilot is an AWS-first TypeScript monorepo for a market-ready personal administration assistant.
+LifePilot is an AWS-first personal administration assistant for documents, contracts, bills, deadlines, appointments, and everyday life admin.
 
-LifePilot is not positioned as "another AI app". It helps normal non-technical people understand documents, contracts, bills, letters, deadlines, appointments, and the next actions they need to take.
+The goal is simple: normal users should be able to upload or paste a document, understand what it means, see what matters, and know what they need to do next.
 
-This repository must not contain API keys, secrets, real user data, or real private documents.
+LifePilot is not just another AI chatbot. It is being built as a real product foundation with authentication, document handling, reminders, AI-assisted analysis, and a future AWS backend.
 
-## Current Milestone: Auth & Upload Simplicity MVP
+---
 
-This sprint makes LifePilot easier for normal non-technical users:
+## What LifePilot does
 
-- Users can stay signed in across reloads through the existing Cognito/Amplify session store. The app checks the current session on startup and clears expired sessions cleanly. Passwords are never stored in `localStorage`.
-- Mock auth/dev mode still works and stores only a fake local development session for reload convenience.
-- Email/password login remains available.
-- Google and Apple login buttons are visible, but only active when Cognito Hosted UI/OAuth public environment variables are configured. Otherwise the UI says the method is prepared but not activated.
-- `/auth/callback` is prepared for redirect-based Cognito Hosted UI login and redirects to `/dashboard` after a real session is available.
-- `/documents` now starts from selecting or dropping a file. LifePilot proposes a document name, uploads through the available flow, and starts deterministic analysis automatically where possible.
-- TXT files are read locally and analyzed for possible deadlines and contract facts.
-- Text-based PDFs are read locally when direct text is available. If no text is available, LifePilot uses the filename for naming/date hints and explains that OCR is needed later.
-- After upload, `/documents` shows a Smart Brain assistant summary by default: what the document is, what matters, the next action, at most one question, and at most three prepared buttons. Raw text, all dates, facts, and technical metadata are hidden behind collapsed details.
-- `/api/ai/document-brain` is server-only. If `OPENAI_API_KEY` is set, the route calls OpenAI with structured JSON and validates/sanitizes the result. If the key is missing or the provider fails, LifePilot returns the deterministic Brain fallback instead.
-- The deterministic fallback recognizes employment termination letters such as `Kündigung Arbeitsverhältnis`, highlights the employment end date, the Agentur für Arbeit action, and the document date, and keeps unrelated dates such as a contract start date in hidden details.
-- Images show honest prepared states. No fake OCR, AI, Gmail, Calendar, subscription, or payment flow is implemented in this sprint.
-- Users can rename an uploaded document later without requiring the backend to be live.
+LifePilot helps users with everyday administration tasks such as:
 
-Required public Cognito Hosted UI variables for social login activation:
+* understanding letters, bills, contracts, emails, and official documents
+* detecting important dates, deadlines, appointments, and payment due dates
+* preparing reminders and tasks
+* extracting important facts like amounts, reference numbers, providers, contract dates, and cancellation deadlines
+* showing a simple next step instead of raw technical output
 
-```bash
+Example:
+
+A user pastes a bill with a payment deadline. LifePilot detects the amount, due date, and reference number, then prepares an internal reminder.
+
+---
+
+## Current Status
+
+LifePilot is currently in an MVP development phase.
+
+The web app already supports:
+
+* login flow with mock/dev mode and Cognito-ready architecture
+* document upload UI
+* local TXT analysis
+* text-based PDF extraction when readable text is available
+* Smart Brain summaries for uploaded or pasted content
+* server-side OpenAI analysis when configured
+* deterministic fallback analysis when OpenAI is not available
+* local reminder creation from detected deadlines
+* duplicate protection for reminders
+* better reminder descriptions with amount and payment reference
+* Vercel Web Analytics for production page views
+* protected LifePilot Brain testing through a private test-code header
+
+Some data is still stored locally in the browser during development. The AWS backend is prepared but not fully deployed and validated yet.
+
+---
+
+## Tech Stack
+
+### Frontend
+
+* Next.js App Router
+* React
+* TypeScript
+* Tailwind CSS
+* pnpm workspaces
+* Turborepo
+
+### Backend / Cloud Foundation
+
+* AWS-first architecture
+* AWS CDK foundation
+* prepared Lambda handlers
+* prepared API Gateway routes
+* prepared DynamoDB persistence
+* prepared S3 document upload architecture
+* Cognito-ready authentication boundary
+
+### AI
+
+* OpenAI server-side integration
+* deterministic local fallback
+* no OpenAI API key exposed to the browser
+
+### Deployment / DevOps
+
+* GitHub feature branches
+* Pull Request workflow
+* Vercel preview and production deployments
+* Vercel Web Analytics
+* local typecheck/build workflow
+
+---
+
+## Repository Structure
+
+```txt
+apps/web                 Next.js web app
+apps/mobile              Expo React Native skeleton
+packages/shared          Shared TypeScript domain types
+packages/ui              Shared UI primitives
+packages/api-client      Mock-first API client
+infra/cdk                AWS CDK foundation
+lambdas/contracts        Contracts Lambda placeholder
+lambdas/documents        Documents Lambda placeholder
+lambdas/reminders        Reminders Lambda placeholder
+lambdas/ai-analysis      AI analysis Lambda placeholder
+docs                     Architecture and development notes
+```
+
+---
+
+## What Works Today
+
+### Documents
+
+* Upload UI is available.
+* TXT files can be read and analyzed locally.
+* Text-based PDFs can be read when direct text is available.
+* Scanned PDFs, photos, and images show an honest OCR-prepared state.
+* LifePilot can propose human-readable document names.
+
+### Smart Brain
+
+* LifePilot can summarize documents in simple language.
+* It can detect important dates and actions.
+* It can show a next step for the user.
+* It can use OpenAI from the server when configured.
+* It falls back to deterministic logic if OpenAI is unavailable.
+
+### Reminders
+
+* Detected deadlines can be confirmed as local reminders.
+* Duplicate reminders are blocked.
+* Reminder notes can include amount, due date, and payment reference.
+* Payment reminders and high-risk wording are prepared for priority handling.
+
+### Auth
+
+* Mock/dev login works locally.
+* Cognito integration is prepared.
+* Google and Apple login buttons are visible but only become active when Cognito Hosted UI is configured.
+
+### Analytics
+
+* Vercel Web Analytics is integrated.
+* Production page views can be tracked after deployment.
+
+---
+
+## What Is Not Production-Ready Yet
+
+The following parts are prepared but not fully production-ready:
+
+* durable AWS document storage
+* deployed DynamoDB persistence for all user data
+* cross-device sync
+* production OCR for scans and photos
+* real Google Calendar / Outlook sync
+* email import
+* subscription and payment flow
+* mobile App Store release
+* production-grade AWS security review
+
+Until the AWS backend is fully deployed and validated, local/dev data may still be stored in browser `localStorage`.
+
+---
+
+## Security Rules
+
+This repository must not contain:
+
+* API keys
+* secrets
+* real private documents
+* real user data
+* production credentials
+
+OpenAI keys must only be stored as server-side environment variables.
+
+Do not use:
+
+```env
+NEXT_PUBLIC_OPENAI_API_KEY
+```
+
+because anything prefixed with `NEXT_PUBLIC_` can be exposed to the browser.
+
+Correct server-side variables:
+
+```env
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
+LIFEPILOT_BRAIN_TEST_CODE=
+```
+
+---
+
+## Environment Variables
+
+### Local development
+
+Create a local environment file for the web app:
+
+```txt
+apps/web/.env.local
+```
+
+Example:
+
+```env
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
+LIFEPILOT_BRAIN_TEST_CODE=your-private-test-code
+NEXT_PUBLIC_USE_MOCKS=true
+NEXT_PUBLIC_USE_MOCK_AUTH=true
+```
+
+### Cognito / Hosted UI
+
+Social login requires public Cognito Hosted UI variables:
+
+```env
 NEXT_PUBLIC_COGNITO_DOMAIN=
 NEXT_PUBLIC_COGNITO_CLIENT_ID=
 NEXT_PUBLIC_COGNITO_REDIRECT_SIGN_IN=http://localhost:3000/auth/callback
@@ -36,298 +222,35 @@ NEXT_PUBLIC_COGNITO_OAUTH_SCOPES=openid,email,profile
 
 Do not put Google or Apple client secrets in frontend environment variables.
 
-Optional server-only Smart Brain variables:
-
-```bash
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4.1-mini
-```
-
-Do not use `NEXT_PUBLIC_OPENAI_API_KEY`. OpenAI keys must never be exposed to the browser.
-
-What still needs Cognito console setup:
-
-1. Configure Cognito Hosted UI domain.
-2. Configure Google provider in Cognito.
-3. Configure Apple provider in Cognito.
-4. Add local callback URL.
-5. Add production callback URL.
-6. Add logout URLs.
-7. Add env variables in Vercel.
-8. Test Google login locally.
-9. Test Google login in production.
-10. Test Apple login in production.
-11. Confirm Cognito user id remains stable for saved contracts/reminders.
-
-Automatic document naming uses this priority:
-
-1. For TXT content, LifePilot looks for provider, document type, and date, for example `Vodafone Rechnung 12.06.2026`, `Allianz Versicherung 2026`, `Jobcenter Schreiben 15.07.2026`, or `Mietvertrag 2026`.
-2. For text-based PDFs, LifePilot first tries direct PDF text extraction and then uses the same deterministic naming rules.
-3. If only the file name is available, scanner-style names are cleaned and made human-readable. German dates like `17.4.25`, `21.4.25`, `17.04.2025`, and `21.04.2025` are normalized.
-4. Invoice filenames can produce clean names such as `Rechnung 17.04.2025 bis 21.04.2025`.
-5. If there is not enough information, LifePilot falls back to `Dokument vom <heutiges Datum>`.
-
-Naming confidence is stored/displayed as `high`, `medium`, or `low`.
-
-Upload pipeline next:
-
-1. Live S3 upload validation.
-2. Stronger PDF extraction validation across browser/device combinations.
-3. OCR for photos/scans.
-4. Connect prepared reminder/task buttons to real confirmed actions.
-5. Persist Brain results server-side after AWS document storage is live.
-
-What works locally:
-
-- Mock/dev login, including reload-friendly fake session state.
-- TXT naming and deterministic TXT analysis in the browser.
-- Text-based PDF extraction in the browser when direct text is available.
-- Filename-based fallback naming/date detection, including `17.4.25` and `21.4.25`.
-- Smart Brain document summaries through server-only OpenAI when configured, with deterministic fallback when not configured.
-- Local/dev upload fallback when the backend is unavailable.
-- Browser-local analysis results, extracted facts, contract records, and reminders.
-
-What needs backend/AWS deploy:
-
-- Production S3 document storage validation.
-- Durable document metadata and analysis records.
-- Cross-device sync.
-- Durable Brain result storage and backend OCR processing.
-- Hosted UI provider activation in Cognito.
-
-Manual browser test steps:
-
-1. Start the web app with `NEXT_PUBLIC_USE_MOCK_AUTH=true NEXT_PUBLIC_USE_MOCKS=true pnpm --filter @lifepilot/web dev`.
-2. Open `http://localhost:3000/login`.
-3. Confirm Google and Apple show as prepared/bald verfügbar when Hosted UI env vars are missing.
-4. Sign in with any email/password in mock mode.
-5. Open `http://localhost:3000/documents`.
-6. Confirm there is one primary upload area: `Dokument hochladen` and `Datei auswählen oder hier ablegen`.
-7. Upload a TXT file containing dates like `fällig am 12.06.2026` and `Kündigungsfrist endet am 30.11.2026`.
-8. Expected TXT result: document uploaded, suggested name, Smart Brain summary shown first, raw text/dates/facts hidden behind collapsed details.
-9. Upload `Rechnung_B-25-016_AN_12904_GB_17.4.25_bis_21.4.25.pdf`.
-10. Expected PDF result: suggested name like `Rechnung 17.04.2025 bis 21.04.2025`; if direct PDF text is available, `PDF-Text wurde erkannt`; if not, `PDF enthält keinen direkt lesbaren Text`; in both cases Smart Brain shows only the most important findings first.
-11. For PNG/JPG scans, expected result is uploaded document plus OCR message: OCR is prepared but not active.
-12. Upload or paste a termination letter containing `Kündigung Arbeitsverhältnis`, `Berlin, den 06.02.2026`, `fristgerecht zum 24.02.2026`, `innerhalb von drei Tagen nach Erhalt`, and `14.11.2025`. Expected Smart Brain result: title `Kündigung Arbeitsverhältnis erkannt`, main findings for `24.02.2026`, Arbeitsuchendmeldung within 3 days after receipt, and `06.02.2026`; question `Wann hast du dieses Schreiben erhalten?`; buttons `Erinnerung erstellen`, `Aufgabe erstellen`, `Details anzeigen`; `14.11.2025` only in hidden details.
-
-## Previous Milestone: LifePilot Memory Core MVP
-
-The web app now focuses on the real LifePilot loop:
-
-1. A document comes in.
-2. LifePilot reads what is currently supported.
-3. LifePilot detects important dates and possible deadlines.
-4. The user reviews and confirms.
-5. LifePilot creates a reminder.
-
-What works now:
-
-- Backend persistence is prepared for user-scoped contracts and reminders through API Gateway, Lambda, and DynamoDB code.
-- CDK now wires real packaged Contracts and Reminders Lambda handlers instead of inline placeholders for those domains.
-- Prepared contract routes: `GET /contracts`, `POST /contracts`, `GET /contracts/{contractId}`, `PATCH /contracts/{contractId}`, `DELETE /contracts/{contractId}`.
-- Prepared reminder routes: `GET /reminders`, `POST /reminders`, `GET /reminders/{reminderId}`, `PATCH /reminders/{reminderId}`, `DELETE /reminders/{reminderId}`.
-- Contracts and reminders are scoped by Cognito `claims.sub` in backend handlers. Frontend-provided `userId` is ignored.
-- The web app has a `LifePilotMemoryService` that tries backend persistence when configured and falls back to clearly labeled local/dev browser storage if the backend is unavailable.
-- `/documents` supports document upload metadata and the presigned S3 upload architecture.
-- TXT files can be read locally in the browser.
-- RTF-like raw markup is not shown as normal extracted text.
-- Simple German dates and deadline contexts are detected deterministically.
-- Structured facts are extracted as reviewable candidates: provider, category, identifiers, prices, payment interval, dates, terms, cancellation data, authority references, and related person profile.
-- Every extracted fact keeps value, confidence, source snippet, verification status, and `updatedAt`.
-- `/documents` now has a "Gefundene Daten prüfen" review section.
-- Missing required fields are shown only for the detected category.
-- The user can save reviewed facts as a local `ContractRecord` or authority document record.
-- `/contracts` is now a local Contract Brain page based on saved `ContractRecord`s.
-- Contract Brain calculates lifecycle status, missing facts, next important date, cancellation readiness, and recommended action.
-- Contract action draft logic can prepare a local German cancellation draft. It does not send anything.
-- Offer comparison creates a local `OfferComparisonIntent` only. No live portal is called.
-- Detected candidates are shown as possible deadlines, not as legal facts.
-- The user can confirm a detected deadline as a local reminder.
-- `/dashboard` uses local knowledge data for contracts, missing facts, possible cancellations, and action suggestions.
-- `/reminders` shows locally confirmed reminders with complete/delete actions.
-- PDF and photo/OCR paths show honest states. Text-based PDFs may be read locally; scanned PDFs and photos still need OCR later.
-
-Local/dev scope:
-
-- TXT analysis runs locally in the browser.
-- Analysis results are stored in browser `localStorage` for the current device.
-- Extracted facts and Contract Brain records are stored in `localStorage` under `lifepilot.local.knowledge.v1`.
-- Confirmed reminders are stored in browser `localStorage` for the current device.
-- If the backend is unavailable, `/documents` can still create a clearly labeled local/dev analysis item.
-- Local/dev analysis, contract records, action drafts, offer comparison intents, and reminders are not production storage and are not cross-device sync.
-- Until AWS is deployed and validated, the visible app can still show: "Entwicklungsmodus: Daten werden aktuell lokal im Browser gespeichert."
-- If backend mode is configured but unavailable, the UI shows: "Backend-Speicherung vorbereitet, aber noch nicht deployed."
-
-Still requires AWS deployment:
-
-- Live validation of the new Contracts and Reminders Lambda handlers against deployed DynamoDB tables.
-- Production migration from browser-local Contract Brain records to user-scoped DynamoDB records.
-- Private S3 upload validation in the deployed environment.
-- Persistent document metadata and upload status in DynamoDB.
-- User-scoped document storage in S3.
-- Persistent `DocumentAnalysis` and reminder records by Cognito user.
-- Persistent extracted facts, verified facts, missing facts, ContractRecords, and action drafts in DynamoDB by Cognito user.
-- Backend OCR/PDF/AI processing without exposing provider keys to the browser.
-
-Next milestones:
-
-1. AWS deploy and live DynamoDB validation.
-2. Document Detail Page.
-3. Stronger PDF extraction validation.
-4. OCR for photos/letters.
-5. AI document explanation.
-6. Calendar export / ICS.
-7. Google Calendar integration.
-8. Email import.
-9. Subscription system.
-10. Mobile capture app.
-
-## Stack
-
-- pnpm Workspaces
-- Turborepo
-- TypeScript
-- Next.js App Router web app
-- Expo React Native mobile skeleton
-- Shared types, UI primitives, and mock API client
-- AWS CDK v2 foundation
-- Lambda placeholders for contracts, documents, reminders, and AI analysis
-
-## Structure
-
-```text
-apps/web                 Next.js App Router landing page and Command Center
-apps/mobile              Expo React Native skeleton
-packages/shared          Shared domain types
-packages/ui              Small web UI primitives
-packages/api-client      Mock-first Life Pilot API client
-infra/cdk                AWS CDK v2 foundation, synth-only
-lambdas/contracts        Contract Lambda placeholder
-lambdas/documents        Document Lambda placeholder
-lambdas/reminders        Reminder Lambda placeholder
-lambdas/ai-analysis      AI analysis Lambda placeholder
-docs                     Architecture and development docs
-```
-
-## Earlier Phase: Contract Dashboard Foundation
-
-An earlier milestone introduced contract and cost management concepts with mock data. The current product direction has moved the active contract experience to `/contracts` as the local Contract Brain.
-
-The current Command Center uses browser-local knowledge data and still does not deploy AWS or use production persistence.
-
-## Phase 3: Contract Backend Foundation
-
-The AWS backend foundation now prepares contract persistence and routes without deploying them:
-
-- DynamoDB `ContractsTable` with `userId` partition key and `contractId` sort key
-- Contract Lambda handler modules for list, create, get, and delete
-- API Gateway route plan for `GET /contracts`, `POST /contracts`, `GET /contracts/{contractId}`, and `DELETE /contracts/{contractId}`
-- API client methods with mock fallback so the dashboard remains local-first
-
-No real AWS data is written in this phase.
-
-## Earlier Phase: Contract Service Mode
-
-The original contract service abstraction is still present for API-client compatibility. Local development can still use mock API data:
-
-```bash
-NEXT_PUBLIC_USE_MOCKS=true
-NEXT_PUBLIC_API_BASE_URL=http://localhost:3001
-```
-
-`NEXT_PUBLIC_USE_MOCKS=true` uses local mock API data. Set `NEXT_PUBLIC_USE_MOCKS=false` plus `NEXT_PUBLIC_API_BASE_URL` later to use API-client calls. This is only a technical switch; no AWS deployment is performed by the web app.
-
-## Product UI Expansion
-
-The web app now includes a calm LifePilot app shell with shared navigation and workspaces for the Command Center, Contract Brain, documents, reminders, insights, vault, assistant, and settings. Documents use a presigned-upload-aware architecture, but local analysis, knowledge records, contracts, action drafts, and reminders remain browser-local until the AWS backend is deployed and validated. No external AI provider is called from the frontend.
-
-## Phase 5: Documents & Vault
-
-The `/documents` and `/vault` workspaces include document organization, document details, protected vault messaging, and security-by-design preparation. `/documents` can use the API client upload flow when configured, and it falls back to a clearly labeled local/dev item when the backend is unavailable.
-
-Do not use sensitive real documents in local/dev mode. Browser-local analysis and reminders are not secure production persistence. See `docs/security.md` for the planned security boundary before broad real document handling.
-
-## Phase 6: Auth & Security Foundation
-
-The web app includes `/login` and `/register`, an `AuthService` abstraction, shared auth types, API client auth header helpers, and protected app routes through `AuthGuard`. Local mock auth remains available for development, while Cognito can be enabled through environment variables.
-
-No Cognito secrets or plaintext passwords are stored in the repository.
-
-## Phase 7: Local API Simulation
-
-The web app now includes local Next.js API routes that simulate the future API Gateway/Lambda boundary:
-
-- `GET /api/auth/session`
-- `GET/POST /api/contracts`
-- `GET/DELETE /api/contracts/{contractId}`
-- `GET/POST /api/documents`
-- `GET/DELETE /api/documents/{documentId}`
-- `GET /api/vault`
-
-Set `NEXT_PUBLIC_USE_MOCKS=false` and `NEXT_PUBLIC_API_BASE_URL=http://localhost:3000/api` to route supported clients through the local API simulation. This still uses mock data only and does not connect to AWS.
-
-## Document Knowledge Base + Contract Brain
-
-The current MVP adds a browser-local knowledge layer in `apps/web/src/services/knowledge`.
-
-Local storage key:
-
-```text
-lifepilot.local.knowledge.v1
-```
-
-It stores:
-
-- extracted document facts by `documentId`
-- verified/corrected facts
-- missing required facts by category
-- local `ContractRecord`s
-- local cancellation drafts
-- local offer comparison intents
-
-Important boundaries:
-
-- Facts start as candidates.
-- The user confirms or corrects facts once.
-- Missing required fields are category-specific.
-- LifePilot must not repeatedly ask for known facts.
-- Cancellation drafts are only drafts.
-- Offer comparison is only planned metadata.
-- No automatic cancellation, email sending, banking call, comparison portal call, or browser-side external AI call happens in this milestone.
-- The optional document Brain AI call is server-only and falls back deterministically when `OPENAI_API_KEY` is not configured.
-
-## LifePilot Memory Core MVP
-
-The Memory Core sprint prepares the move from device-local demo state to real SaaS persistence.
-
-Prepared AWS design:
-
-- `ContractsTable`: partition key `userId`, sort key `contractId`.
-- `RemindersTable`: partition key `userId`, sort key `reminderId`.
-- Both tables use `PAY_PER_REQUEST`.
-- Records are always scoped by Cognito user id from API Gateway authorizer claims.
-- No frontend-provided `userId` is trusted.
-- Reminder items also store `dueDate` and `status` attributes to support upcoming reminder queries later.
-
-Prepared backend APIs:
-
-- Contracts: `GET`, `POST`, `GET by id`, `PATCH`, `DELETE`.
-- Reminders: `GET`, `POST`, `GET by id`, `PATCH`, `DELETE`.
-
-Local test notes:
-
-- Keep `NEXT_PUBLIC_USE_MOCKS=true` for normal local fallback.
-- Set `NEXT_PUBLIC_USE_MOCKS=false` with a deployed `NEXT_PUBLIC_API_BASE_URL` only when the API is actually available.
-- If backend mode fails locally, LifePilot falls back and shows that data is currently stored in the browser.
+---
 
 ## Getting Started
 
+Install dependencies:
+
 ```bash
 pnpm install
-pnpm dev
 ```
 
-Run checks:
+Start the web app:
+
+```bash
+pnpm --filter @lifepilot/web dev
+```
+
+Open:
+
+```txt
+http://localhost:3000
+```
+
+Run TypeScript checks:
+
+```bash
+pnpm --filter @lifepilot/web typecheck
+```
+
+Run all checks from the monorepo root when available:
 
 ```bash
 pnpm typecheck
@@ -335,37 +258,85 @@ pnpm lint
 pnpm build
 ```
 
-Run individual apps:
+---
 
-```bash
-pnpm --filter @lifepilot/web dev
-pnpm --filter @lifepilot/mobile dev
+## Main Local Routes
+
+```txt
+/login
+/register
+/dashboard
+/documents
+/reminders
+/contracts
+/insights
+/vault
+/ai-assistant
+/settings
 ```
 
-Local web routes:
-
-```text
-http://localhost:3000/
-http://localhost:3000/login
-http://localhost:3000/register
-http://localhost:3000/dashboard
-http://localhost:3000/contracts
-http://localhost:3000/goals
-http://localhost:3000/documents
-http://localhost:3000/reminders
-http://localhost:3000/insights
-http://localhost:3000/vault
-http://localhost:3000/ai-assistant
-http://localhost:3000/settings
-```
+---
 
 ## AWS Boundary
 
-The CDK app can be built and synthesized locally, but this foundation does not deploy anything.
+The AWS CDK foundation can be built and synthesized locally.
 
 ```bash
 pnpm --filter @lifepilot/cdk build
 pnpm --filter @lifepilot/cdk synth
 ```
 
-Do not run `cdk deploy` until AWS accounts, environments, secrets management, and data handling rules are explicitly defined.
+Do not run production AWS deployments until the account setup, secrets management, IAM permissions, data handling rules, and cost controls are clearly defined.
+
+Planned AWS production components:
+
+* Cognito for authentication
+* S3 for private document storage
+* DynamoDB for user-scoped records
+* Lambda for backend logic
+* API Gateway for backend APIs
+* CloudWatch for logs and monitoring
+* Secrets Manager or SSM Parameter Store for secrets
+* CI/CD pipeline for automated checks and deployment
+
+---
+
+## Current Roadmap
+
+### Next
+
+* improve reminder priority handling
+* finish backend persistence validation
+* add stronger CI checks with GitHub Actions
+* connect document analysis results to durable backend storage
+* improve PDF validation across more file types
+* add OCR support for scans and photos
+
+### Later
+
+* Google Calendar / Outlook sync
+* email import
+* subscription system
+* mobile app capture flow
+* App Store release
+* full AWS production deployment
+
+---
+
+## Project Goal
+
+LifePilot is also a learning and portfolio project.
+
+It is built to demonstrate practical skills in:
+
+* TypeScript
+* Next.js
+* Git and GitHub workflow
+* server-side API protection
+* environment variable handling
+* cloud-ready architecture
+* AWS fundamentals
+* CI/CD practices
+* product-oriented engineering
+
+The long-term goal is to turn LifePilot into a real SaaS/mobile product while using it as a practical DevOps and Cloud Engineering portfolio project.
